@@ -1,4 +1,3 @@
-
 from flask import Flask, request
 import os
 import requests
@@ -130,7 +129,7 @@ def webhook():
         mentioned_profile = None
 
         for alias in ALIAS_TO_PROFILE:
-            pattern = r'\\b' + re.escape(alias) + r'\\b'
+            pattern = r'\b' + re.escape(alias) + r'\b'
             if re.search(pattern, text, flags=re.IGNORECASE) and alias != sender.lower():
                 mentioned_profile = ALIAS_TO_PROFILE[alias]
                 break
@@ -145,6 +144,7 @@ def webhook():
         def profile_block(profile):
             out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
             out += f"{profile.get('description', 'No description')}\n"
+            out += f"- Tone: {profile.get('tone_directive', '')}\n"
             if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
                 out += f"- Teams: {profile.get('team', 'unknown')}\n"
             if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
