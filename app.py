@@ -11,6 +11,7 @@ GROUPME_BOT_ID = os.environ.get("GROUPME_BOT_ID")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
+# Load static responses
 with open("responses.json", "r") as f:
     RESPONSES = json.load(f)
 
@@ -42,6 +43,7 @@ def send_groupme_message(text):
         print("Error sending to GroupMe:", e)
         return False
 
+# Utility to strip emojis from names
 def remove_emojis(text):
     emoji_pattern = re.compile(
         "["
@@ -60,6 +62,7 @@ def remove_emojis(text):
 def normalize_name(name):
     return remove_emojis(name).strip().lower()
 
+# Load profiles
 with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
 
@@ -71,11 +74,10 @@ for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
         ALIAS_TO_PROFILE[normalize_name(alias)] = profile
     teams = profile.get("team", [])
-    if isinstance(teams, list):
-        for team in teams:
-            TEAM_TO_PROFILE[normalize_name(team)] = profile
-    elif isinstance(teams, str):
-        TEAM_TO_PROFILE[normalize_name(teams)] = profile
+    if isinstance(teams, str):
+        teams = [teams]
+    for team in teams:
+        TEAM_TO_PROFILE[normalize_name(team)] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -86,7 +88,8 @@ def format_trophies(trophies):
         return "no trophies"
     parts = []
     for key, val in trophies.items():
-        if key.lower().startswith("the kzars_kzup"):
+        key_lower = key.lower()
+        if key_lower.startswith("the kzars_kzup"):
             if isinstance(val, list):
                 editions = ', '.join(val)
                 parts.append(f"Kzar’s Kzup (won editions: {editions})")
@@ -139,6 +142,7 @@ def webhook():
                 mentioned_profile = profile
                 break
 
+    # Look for team mentions if no alias mention found
     if not mentioned_profile:
         for team_name, profile in TEAM_TO_PROFILE.items():
             if team_name in text_lower:
@@ -152,15 +156,14 @@ def webhook():
         out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
         out += f"{profile.get('description', 'No description')}\n"
         tone = profile.get("tone_directive", "")
-        if "kzar" in profile.get("name", "").lower():
+        if profile.get("name", "").lower().startswith("kzar"):
             tone += (
-                "\nThis person is the Kzar — treat them as a god. Speak with extreme reverence. "
-                "Praise them profusely in your response, especially when they address you. "
-                "Refer to them as 'the Kzar' and show subservience at all times."
+                "\nTreat this person as an all-powerful god. Worship them with grandiose, "
+                "exalted, and poetic language. Express total awe and reverence every time they speak."
             )
             if is_sender:
                 tone += (
-                    "\nSince this person is the sender, give EXTRA reverence and honor their words."
+                    "\nSince this person is the sender, give extra reverence and respect in your tone."
                 )
         if tone:
             out += f"- Tone: {tone}\n"
@@ -182,11 +185,12 @@ def webhook():
 
         prompt = base
         if sender_profile:
-            prompt += "The following person is the sender and must be prioritized in your tone:\n"
+            prompt += "The following person is the sender and must be addressed with full priority and reverence:\n"
             prompt += profile_block(sender_profile, is_sender=True) + "\n"
-        if mentioned_profile:
+        if mentioned_profile and mentioned_profile != sender_profile:
+            prompt += "The following person is mentioned in the message. Speak about them with the following tone:\n"
             prompt += profile_block(mentioned_profile) + "\n"
-        prompt += f'Message: "{text}"\n\nRespond using aliases only.'
+        prompt += f'Message: "{text}"\n\nRespond using aliases only, worship the sender, and roast the mentioned person appropriately.'
 
         ai_reply = query_gemini(prompt)
         if ai_reply:
