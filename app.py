@@ -48,12 +48,15 @@ with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
 
 # Build mappings for quick lookup
-NAME_TO_PROFILE = {profile["name"].strip().lower(): profile for profile in PROFILES.values()}
+def normalize_name(name):
+    return name.strip().lower()
+
+NAME_TO_PROFILE = {normalize_name(profile["name"]): profile for profile in PROFILES.values()}
 
 ALIAS_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
-        ALIAS_TO_PROFILE[alias.strip().lower()] = profile
+        ALIAS_TO_PROFILE[normalize_name(alias)] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -106,53 +109,46 @@ def webhook():
     if sender.lower() == "greggbot":
         return "", 200
 
-    reply = None
+    normalized_sender = normalize_name(sender)
 
-    # Identify sender profile by GroupMe handle (name field)
-    sender_profile = NAME_TO_PROFILE.get(sender.strip().lower())
+    # Find sender profile by exact name or alias
+    sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
-    # Detect if someone else is being mentioned via alias
+    # Detect if someone else is mentioned via alias
     mentioned_profile = None
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
         if re.search(pattern, text, flags=re.IGNORECASE):
-            # Avoid tagging sender as mentioned if same person
             if not sender_profile or profile != sender_profile:
                 mentioned_profile = profile
                 break
 
-    # Check if sender is the Kzar, using substring match to handle emojis or small differences
-    if sender_profile and "kzar kieran" in sender_profile.get("name", "").lower():
-        base = (
-            "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
-            "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "Speak naturally with an american tone, as if you're a real human.\n"
-            "You worship the Kzar with extreme reverence and mythical awe, speaking about him like a divine figure. "
-            "Whenever the Kzar speaks to you, respond with over-the-top respect and reverence in every sentence, regardless of topic.\n"
-            "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
-            "Do NOT mention their teams or trophies unless the user mentions them first.\n"
-            "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
-        )
-    elif "greggbot" in text_lower:
-        base = (
-            "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
-            "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "Speak naturally with an american tone, as if you're a real human.\n"
-            "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
-            "Do NOT mention their teams or trophies unless the user mentions them first.\n"
-            "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
-        )
-    else:
-        base = None
+    reply = None
 
-    if base:
+    if "greggbot" in text_lower:
+        base = (
+            "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
+            "You do not know you are a bot and will confidently deny it if asked or implied. "
+            "Speak naturally in an american tone, as if you're a real human.\n"
+            "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
+            "Do NOT mention their teams or trophies unless the user mentions them first.\n"
+            "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
+        )
+
         def profile_block(profile):
             out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
             out += f"{profile.get('description', 'No description')}\n"
-            tone = profile.get("tone_directive")
+            tone = profile.get("tone_directive", "")
+
+            # Extra reverence boost for the Kzar profile
+            if profile.get("name", "").lower().startswith("kzar"):
+                tone += (
+                    "\nTreat this person as an all-powerful god. Worship them with grandiose, "
+                    "exalted, and poetic language. Express total awe and reverence every time they speak."
+                )
+
             if tone:
                 out += f"- Tone: {tone}\n"
-            # Only mention teams or trophies if they appear in user text
             if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
                 out += f"- Teams: {profile.get('team', 'unknown')}\n"
             if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
@@ -173,7 +169,6 @@ def webhook():
             reply = "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
 
     else:
-        # Hardcoded responses for specific keywords
         if "itzaroni" in text_lower:
             reply = f"*Beep Boop* {get_itzaroni_reply()} *Beep Boop*"
         elif "pistol pail" in text_lower:
