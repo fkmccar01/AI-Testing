@@ -11,7 +11,6 @@ GROUPME_BOT_ID = os.environ.get("GROUPME_BOT_ID")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
-# Load static responses
 with open("responses.json", "r") as f:
     RESPONSES = json.load(f)
 
@@ -43,26 +42,18 @@ def send_groupme_message(text):
         print("Error sending to GroupMe:", e)
         return False
 
-# Utility to strip emojis from names
 def remove_emojis(text):
     emoji_pattern = re.compile(
-        "["
-        "\U0001F600-\U0001F64F"
-        "\U0001F300-\U0001F5FF"
-        "\U0001F680-\U0001F6FF"
-        "\U0001F1E0-\U0001F1FF"
-        "\U00002700-\U000027BF"
-        "\U0001F900-\U0001F9FF"
-        "\U00002600-\U000026FF"
-        "\U0001FA70-\U0001FAFF"
-        "\U000025A0-\U000025FF"
-        "]+", flags=re.UNICODE)
+        "[" "\U0001F600-\U0001F64F" "\U0001F300-\U0001F5FF"
+        "\U0001F680-\U0001F6FF" "\U0001F1E0-\U0001F1FF"
+        "\U00002700-\U000027BF" "\U0001F900-\U0001F9FF"
+        "\U00002600-\U000026FF" "\U0001FA70-\U0001FAFF"
+        "\U000025A0-\U000025FF" "]+", flags=re.UNICODE)
     return emoji_pattern.sub(r'', text)
 
 def normalize_name(name):
     return remove_emojis(name).strip().lower()
 
-# Load profiles
 with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
 
@@ -70,13 +61,15 @@ NAME_TO_PROFILE = {normalize_name(profile["name"]): profile for profile in PROFI
 
 ALIAS_TO_PROFILE = {}
 TEAM_TO_PROFILE = {}
-
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
         ALIAS_TO_PROFILE[normalize_name(alias)] = profile
-    team = profile.get("team", "")
-    if team:
-        TEAM_TO_PROFILE[normalize_name(team)] = profile
+    team_field = profile.get("team", "")
+    if isinstance(team_field, str):
+        TEAM_TO_PROFILE[normalize_name(team_field)] = profile
+    elif isinstance(team_field, list):
+        for team_name in team_field:
+            TEAM_TO_PROFILE[normalize_name(team_name)] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -135,7 +128,7 @@ def webhook():
 
     mentioned_profile = None
 
-    # Check for alias mention
+    # Check for alias matches
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
         if re.search(pattern, text, flags=re.IGNORECASE):
@@ -143,7 +136,7 @@ def webhook():
                 mentioned_profile = profile
                 break
 
-    # Check for team mention
+    # If no alias match, check for team mentions
     if not mentioned_profile:
         for team_name, profile in TEAM_TO_PROFILE.items():
             if team_name in text_lower:
