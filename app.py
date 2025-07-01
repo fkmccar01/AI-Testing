@@ -47,17 +47,13 @@ def send_groupme_message(text):
 with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
 
-# Utility to normalize strings (remove emojis and punctuation, lowercase)
-def normalize_text(text):
-    return re.sub(r'[^\w\s-]', '', text).strip().lower()
-
 # Build mappings for quick lookup
-NAME_TO_PROFILE = {normalize_text(profile["name"]): profile for profile in PROFILES.values()}
+NAME_TO_PROFILE = {profile["name"].strip().lower(): profile for profile in PROFILES.values()}
 
 ALIAS_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
-        ALIAS_TO_PROFILE[normalize_text(alias)] = profile
+        ALIAS_TO_PROFILE[alias.strip().lower()] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -82,8 +78,8 @@ def format_trophies(trophies):
     return ", ".join(parts)
 
 def query_gemini(prompt):
-    headers = {"Content-Type": "application/json"}
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    headers = { "Content-Type": "application/json" }
+    payload = { "contents": [ { "parts": [ { "text": prompt } ] } ] }
     try:
         response = requests.post(GEMINI_API_URL, headers=headers, json=payload)
         response.raise_for_status()
@@ -112,12 +108,15 @@ def webhook():
 
     reply = None
 
-    sender_profile = NAME_TO_PROFILE.get(normalize_text(sender))
+    # Identify sender profile by GroupMe handle (name field)
+    sender_profile = NAME_TO_PROFILE.get(sender.strip().lower())
 
+    # Detect if someone else is being mentioned via alias
     mentioned_profile = None
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
-        if re.search(pattern, normalize_text(text), flags=re.IGNORECASE):
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            # Avoid tagging sender as mentioned if same person
             if not sender_profile or profile != sender_profile:
                 mentioned_profile = profile
                 break
@@ -126,7 +125,7 @@ def webhook():
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
             "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "Speak naturally in an american tone, as if you're a real human.\n"
+            "Speak naturally, as if you're a real human.\n"
             "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
             "Do NOT mention their teams or trophies unless the user mentions them first.\n"
             "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
@@ -138,10 +137,12 @@ def webhook():
             tone = profile.get("tone_directive")
             if tone:
                 out += f"- Tone: {tone}\n"
+            # Add team info only if mentioned in the text
             if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
                 out += f"- Teams: {profile.get('team', 'unknown')}\n"
+            # Add trophies info only if mentioned in the text
             if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
-                out += f"- Trophies: {format_trophies(profile.get('trophies', {}) )}\n"
+                out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
             return out
 
         prompt = base
