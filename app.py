@@ -43,13 +43,28 @@ def send_groupme_message(text):
         print("Error sending to GroupMe:", e)
         return False
 
+# Utility to strip emojis from names
+def remove_emojis(text):
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"
+        "\U0001F300-\U0001F5FF"
+        "\U0001F680-\U0001F6FF"
+        "\U0001F1E0-\U0001F1FF"
+        "\U00002700-\U000027BF"
+        "\U0001F900-\U0001F9FF"
+        "\U00002600-\U000026FF"
+        "\U0001FA70-\U0001FAFF"
+        "\U000025A0-\U000025FF"
+        "]+", flags=re.UNICODE)
+    return emoji_pattern.sub(r'', text)
+
+def normalize_name(name):
+    return remove_emojis(name).strip().lower()
+
 # Load profiles
 with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
-
-# Build mappings for quick lookup
-def normalize_name(name):
-    return name.strip().lower()
 
 NAME_TO_PROFILE = {normalize_name(profile["name"]): profile for profile in PROFILES.values()}
 
@@ -81,8 +96,8 @@ def format_trophies(trophies):
     return ", ".join(parts)
 
 def query_gemini(prompt):
-    headers = { "Content-Type": "application/json" }
-    payload = { "contents": [ { "parts": [ { "text": prompt } ] } ] }
+    headers = {"Content-Type": "application/json"}
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
     try:
         response = requests.post(GEMINI_API_URL, headers=headers, json=payload)
         response.raise_for_status()
@@ -111,10 +126,8 @@ def webhook():
 
     normalized_sender = normalize_name(sender)
 
-    # Find sender profile by exact name or alias
     sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
-    # Detect if someone else is mentioned via alias
     mentioned_profile = None
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
@@ -139,14 +152,11 @@ def webhook():
             out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
             out += f"{profile.get('description', 'No description')}\n"
             tone = profile.get("tone_directive", "")
-
-            # Extra reverence boost for the Kzar profile
             if profile.get("name", "").lower().startswith("kzar"):
                 tone += (
                     "\nTreat this person as an all-powerful god. Worship them with grandiose, "
                     "exalted, and poetic language. Express total awe and reverence every time they speak."
                 )
-
             if tone:
                 out += f"- Tone: {tone}\n"
             if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
