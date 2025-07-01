@@ -11,11 +11,9 @@ GROUPME_BOT_ID = os.environ.get("GROUPME_BOT_ID")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
-# Load static insults/praises
 with open("responses.json", "r") as f:
     RESPONSES = json.load(f)
 
-# Helper to replace c/C with kz/Kz for kzar praises
 def replace_c_with_kz(text):
     return re.sub(r'[cC]', lambda m: 'kz' if m.group(0).islower() else 'Kz', text)
 
@@ -45,29 +43,15 @@ def send_groupme_message(text):
         print("Error sending to GroupMe:", e)
         return False
 
-# Strip emojis helper
 def remove_emojis(text):
-    emoji_pattern = re.compile(
-        "["
-        "\U0001F600-\U0001F64F"
-        "\U0001F300-\U0001F5FF"
-        "\U0001F680-\U0001F6FF"
-        "\U0001F1E0-\U0001F1FF"
-        "\U00002700-\U000027BF"
-        "\U0001F900-\U0001F9FF"
-        "\U00002600-\U000026FF"
-        "\U0001FA70-\U0001FAFF"
-        "\U000025A0-\U000025FF"
-        "]+", flags=re.UNICODE)
+    emoji_pattern = re.compile("[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF\U00002700-\U000027BF\U0001F900-\U0001F9FF\U00002600-\U000026FF\U0001FA70-\U0001FAFF\U000025A0-\U000025FF]+", flags=re.UNICODE)
     return emoji_pattern.sub(r'', text)
 
 def normalize_name(name):
     if isinstance(name, list):
-        # Defensive fallback if name is a list (fix for bad input)
         name = " ".join(name)
     return remove_emojis(name).strip().lower()
 
-# Load profiles
 with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
 
@@ -151,57 +135,41 @@ def webhook():
     text = data.get("text", "")
     text_lower = text.lower()
 
-    # Ignore messages from GreggBot itself
     if sender.lower() == "greggbot":
         return "", 200
 
     normalized_sender = normalize_name(sender)
-
-    # Identify sender profile
     sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
-    # Helper to check exact word-boundary mention
+    mentioned_profiles = []
+    mentioned_profiles_set = set()
+
     def is_mentioned(alias_or_team, text):
         pattern = r'\b' + re.escape(alias_or_team.lower()) + r'\b'
         return re.search(pattern, text) is not None
 
-    import re
+    for alias, profile in ALIAS_TO_PROFILE.items():
+        alias_lower = alias.lower()
+        if alias_lower == "gg":
+            if profile["name"].lower() not in text_lower:
+                continue
+        if is_mentioned(alias_lower, text_lower):
+            if sender_profile and profile["name"] == sender_profile["name"]:
+                continue
+            if profile["name"] not in mentioned_profiles_set:
+                mentioned_profiles.append(profile)
+                mentioned_profiles_set.add(profile["name"])
 
-mentioned_profiles = []
-mentioned_profiles_set = set()
+    for team_name, profile in TEAM_TO_PROFILE.items():
+        if is_mentioned(team_name.lower(), text_lower):
+            if sender_profile and profile["name"] == sender_profile["name"]:
+                continue
+            if profile["name"] not in mentioned_profiles_set:
+                mentioned_profiles.append(profile)
+                mentioned_profiles_set.add(profile["name"])
 
-def is_mentioned(alias_or_team, text):
-    # Build a regex pattern with word boundaries, ignoring case
-    pattern = r'\b' + re.escape(alias_or_team.lower()) + r'\b'
-    return re.search(pattern, text) is not None
+    reply = None
 
-# Check aliases first, excluding ambiguous "gg"
-for alias, profile in ALIAS_TO_PROFILE.items():
-    alias_lower = alias.lower()
-    if alias_lower == "gg":
-        # Only match if full name is present somewhere instead
-        full_name_lower = profile["name"].lower()
-        if full_name_lower not in text_lower:
-            continue
-    if is_mentioned(alias_lower, text_lower):
-        if sender_profile and profile["name"] == sender_profile["name"]:
-            continue
-        if profile["name"] not in mentioned_profiles_set:
-            mentioned_profiles.append(profile)
-            mentioned_profiles_set.add(profile["name"])
-
-# Then check teams
-for team_name, profile in TEAM_TO_PROFILE.items():
-    if is_mentioned(team_name.lower(), text_lower):
-        if sender_profile and profile["name"] == sender_profile["name"]:
-            continue
-        if profile["name"] not in mentioned_profiles_set:
-            mentioned_profiles.append(profile)
-            mentioned_profiles_set.add(profile["name"])
-
-reply = None
-
-    # Hardcoded fun replies if no AI prompt needed
     if "itzaroni" in text_lower:
         raw_reply = get_itzaroni_reply()
     elif "pistol pail" in text_lower:
@@ -213,7 +181,6 @@ reply = None
     elif "franzia" in text_lower and "title" in text_lower:
         raw_reply = "Franzia and titles? https://howmanydayssincefranzialastwonthegoon.netlify.app/"
     else:
-        # Compose prompt for Gemini
         prompt = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
             "You do not know you are a bot and will confidently deny it if asked or implied. "
@@ -233,18 +200,13 @@ reply = None
         prompt += "Generate a single natural, sarcastic and tone-appropriate reply addressing the sender with their tone, and commenting on any mentioned other profiles using their tones, blending the tones naturally. Use aliases only."
 
         ai_reply = query_gemini(prompt)
-        if ai_reply:
-            raw_reply = ai_reply
-        else:
-            raw_reply = "Sorry, my sarcasm circuit is offline right now."
+        raw_reply = ai_reply if ai_reply else "Sorry, my sarcasm circuit is offline right now."
 
-    # Clean *Beep Boop* wrappers if present, then add exactly one pair
     cleaned_reply = raw_reply.strip()
     cleaned_reply = re.sub(r'^\*Beep Boop\*\s*', '', cleaned_reply, flags=re.IGNORECASE)
     cleaned_reply = re.sub(r'\s*\*Beep Boop\*$', '', cleaned_reply, flags=re.IGNORECASE)
 
     reply = f"*Beep Boop* {cleaned_reply.strip()} *Beep Boop*"
-
     send_groupme_message(reply)
 
     return "", 200
