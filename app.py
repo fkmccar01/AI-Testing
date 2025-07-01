@@ -186,8 +186,10 @@ def webhook():
             prompt += profile_block(sender_profile, is_sender=True) + "\n"
         if mentioned_profile:
             prompt += profile_block(mentioned_profile) + "\n"
+        
+        prompt += "REMEMBER: Do NOT restate the profile notes literally. Improvise and speak conversationally with natural sarcasm.\n"
         prompt += f'Message: "{text}"\n\nRespond using aliases only.'
-
+        
         ai_reply = query_gemini(prompt)
         if ai_reply:
             reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*"
