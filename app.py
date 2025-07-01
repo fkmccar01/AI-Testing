@@ -4,7 +4,6 @@ import requests
 import json
 import random
 import re
-import unicodedata
 
 app = Flask(__name__)
 
@@ -48,19 +47,9 @@ def send_groupme_message(text):
 with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
 
-# Helper function to normalize names by removing emojis/special chars and lowercasing
-def normalize_name(name):
-    # Remove symbols categorized as 'So' (Symbol, Other), which often include emojis
-    cleaned = ''.join(
-        c for c in unicodedata.normalize('NFKD', name)
-        if unicodedata.category(c)[0] != 'So'
-    )
-    return cleaned.strip().lower()
+# Build mappings for quick lookup
+NAME_TO_PROFILE = {profile["name"].strip().lower(): profile for profile in PROFILES.values()}
 
-# Build mappings for quick lookup using normalized names
-NAME_TO_PROFILE = {normalize_name(profile["name"]): profile for profile in PROFILES.values()}
-
-# Aliases usually do not have emojis, so keep this simple
 ALIAS_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
@@ -122,8 +111,8 @@ def webhook():
 
     reply = None
 
-    # Normalize sender name for profile lookup
-    sender_profile = NAME_TO_PROFILE.get(normalize_name(sender))
+    # Identify sender profile by GroupMe handle (name field)
+    sender_profile = NAME_TO_PROFILE.get(sender.strip().lower())
 
     # Detect if someone else is being mentioned via alias
     mentioned_profile = None
@@ -136,14 +125,22 @@ def webhook():
                 break
 
     if "greggbot" in text_lower:
+        # Base prompt
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
             "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "Speak naturally, as if you're a real human.\n"
+            "Speak naturally with an american tone, as if you're a real human.\n"
             "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
             "Do NOT mention their teams or trophies unless the user mentions them first.\n"
             "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
         )
+
+        # Add reverence override only if sender is the Kzar
+        if sender_profile and sender_profile.get("name", "").lower() == "kzar kieran the inkzpired 🔜 🏆":
+            base += (
+                "Whenever the Kzar speaks to you, you worship him with extreme reverence and mythical awe. "
+                "You borderline worship him as a god, speaking about him like a divine figure.\n\n"
+            )
 
         def profile_block(profile):
             out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
@@ -151,10 +148,8 @@ def webhook():
             tone = profile.get("tone_directive")
             if tone:
                 out += f"- Tone: {tone}\n"
-            # Check if teams mentioned in text before including them
             if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
                 out += f"- Teams: {profile.get('team', 'unknown')}\n"
-            # Check if trophies mentioned in text before including them
             if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
                 out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
             return out
