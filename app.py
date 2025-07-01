@@ -126,8 +126,10 @@ def webhook():
 
     normalized_sender = normalize_name(sender)
 
-    sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
+    # Get sender profile by exact name only (not alias)
+    sender_profile = NAME_TO_PROFILE.get(normalized_sender)
 
+    # Detect if someone else is mentioned via alias
     mentioned_profile = None
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
@@ -137,27 +139,6 @@ def webhook():
                 break
 
     reply = None
-
-    def profile_block(profile, is_sender=False):
-        out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
-        out += f"{profile.get('description', 'No description')}\n"
-        tone = profile.get("tone_directive", "")
-        if profile.get("name", "").lower().startswith("kzar"):
-            tone += (
-                "\nTreat this person as an all-powerful god. Worship them with grandiose, "
-                "exalted, and poetic language. Express total awe and reverence every time they speak."
-            )
-            if is_sender:
-                tone += (
-                    "\nSince this person is the sender, give extra reverence and respect in your tone."
-                )
-        if tone:
-            out += f"- Tone: {tone}\n"
-        if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
-            out += f"- Teams: {profile.get('team', 'unknown')}\n"
-        if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
-            out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
-        return out
 
     if "greggbot" in text_lower:
         base = (
@@ -169,11 +150,32 @@ def webhook():
             "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
         )
 
+        def profile_block(profile, is_sender=False):
+            out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
+            out += f"{profile.get('description', 'No description')}\n"
+            tone = profile.get("tone_directive", "")
+
+            # Apply reverence ONLY if this profile is the sender and is Kzar
+            if is_sender and profile.get("name", "").lower().startswith("kzar"):
+                tone += (
+                    "\nTreat this person as an all-powerful god. Worship them with grandiose, "
+                    "exalted, and poetic language. Express total awe and reverence every time they speak."
+                )
+
+            if tone:
+                out += f"- Tone: {tone}\n"
+            if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
+                out += f"- Teams: {profile.get('team', 'unknown')}\n"
+            if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
+                out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
+            return out
+
         prompt = base
         if sender_profile:
             prompt += profile_block(sender_profile, is_sender=True) + "\n"
         if mentioned_profile:
-            prompt += profile_block(mentioned_profile) + "\n"
+            # Mentioned profile is never considered sender, so no reverence here
+            prompt += profile_block(mentioned_profile, is_sender=False) + "\n"
         prompt += f'Message: "{text}"\n\nRespond using aliases only.'
 
         ai_reply = query_gemini(prompt)
