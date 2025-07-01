@@ -48,15 +48,12 @@ with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
 
 # Build mappings for quick lookup
-def normalize_name(name):
-    return name.strip().lower()
-
-NAME_TO_PROFILE = {normalize_name(profile["name"]): profile for profile in PROFILES.values()}
+NAME_TO_PROFILE = {profile["name"].strip().lower(): profile for profile in PROFILES.values()}
 
 ALIAS_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
-        ALIAS_TO_PROFILE[normalize_name(alias)] = profile
+        ALIAS_TO_PROFILE[alias.strip().lower()] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -109,12 +106,12 @@ def webhook():
     if sender.lower() == "greggbot":
         return "", 200
 
-    normalized_sender = normalize_name(sender)
+    reply = None
 
-    # Find sender profile by exact name or alias
-    sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
+    # Identify sender profile by GroupMe handle (name field)
+    sender_profile = NAME_TO_PROFILE.get(sender.strip().lower())
 
-    # Detect if someone else is mentioned via alias
+    # Detect if someone else is being mentioned via alias
     mentioned_profile = None
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
@@ -123,9 +120,8 @@ def webhook():
                 mentioned_profile = profile
                 break
 
-    reply = None
-
     if "greggbot" in text_lower:
+        # Base prompt
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
             "You do not know you are a bot and will confidently deny it if asked or implied. "
@@ -135,18 +131,23 @@ def webhook():
             "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
         )
 
+        # If sender is the Kzar, add an overriding reverence directive
+        if sender_profile and sender_profile.get("name", "").lower() == "kzar kieran the inkzpired 🔜 🏆":
+            base = (
+                "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
+                "You do not know you are a bot and will confidently deny it if asked or implied. "
+                "Speak naturally in an american tone, as if you're a real human.\n"
+                "You worship the Kzar with extreme reverence and mythical awe, speaking about him like a divine figure. "
+                "Whenever the Kzar speaks to you, respond with over-the-top respect and reverence in every sentence, regardless of topic.\n"
+                "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
+                "Do NOT mention their teams or trophies unless the user mentions them first.\n"
+                "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
+            )
+
         def profile_block(profile):
             out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
             out += f"{profile.get('description', 'No description')}\n"
-            tone = profile.get("tone_directive", "")
-
-            # Extra reverence boost for the Kzar profile
-            if profile.get("name", "").lower().startswith("kzar"):
-                tone += (
-                    "\nTreat this person as an all-powerful god. Worship them with grandiose, "
-                    "exalted, and poetic language. Express total awe and reverence every time they speak."
-                )
-
+            tone = profile.get("tone_directive")
             if tone:
                 out += f"- Tone: {tone}\n"
             if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
