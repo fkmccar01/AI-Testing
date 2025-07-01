@@ -46,7 +46,7 @@ def send_groupme_message(text):
 # Utility to strip emojis from names
 def remove_emojis(text):
     emoji_pattern = re.compile(
-        "["
+        "[" 
         "\U0001F600-\U0001F64F"
         "\U0001F300-\U0001F5FF"
         "\U0001F680-\U0001F6FF"
@@ -73,10 +73,12 @@ TEAM_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
         ALIAS_TO_PROFILE[normalize_name(alias)] = profile
-    teams = profile.get("team", [])
-    if isinstance(teams, str):
-        teams = [teams]
-    for team in teams:
+    team = profile.get("team", "")
+    # Handle team being a list or string
+    if isinstance(team, list):
+        for t in team:
+            TEAM_TO_PROFILE[normalize_name(t)] = profile
+    elif isinstance(team, str) and team:
         TEAM_TO_PROFILE[normalize_name(team)] = profile
 
 def display_nickname(profile):
@@ -131,7 +133,6 @@ def webhook():
         return "", 200
 
     normalized_sender = normalize_name(sender)
-
     sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
     mentioned_profile = None
@@ -153,10 +154,11 @@ def webhook():
     reply = None
 
     def profile_block(profile, is_sender=False):
-        out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
+        out = f"# Notes about {display_nickname(profile)} (for internal context only):\n"
         out += f"{profile.get('description', 'No description')}\n"
         tone = profile.get("tone_directive", "")
         if profile.get("name", "").lower().startswith("kzar"):
+            # Always worship Kzar
             tone += (
                 "\nTreat this person as an all-powerful god. Worship them with grandiose, "
                 "exalted, and poetic language. Express total awe and reverence every time they speak."
@@ -165,11 +167,19 @@ def webhook():
                 tone += (
                     "\nSince this person is the sender, give extra reverence and respect in your tone."
                 )
+        elif is_sender and profile.get("name", "").lower().startswith("pistol_pail"):
+            # Example: If sender is Pistol Pail, add something (optional)
+            pass
+
         if tone:
-            out += f"- Tone: {tone}\n"
-        if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
+            if is_sender:
+                out += f"- Sender Tone: {tone}\n"
+            else:
+                out += f"- Mentioned Tone: {tone}\n"
+
+        if not is_sender and any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
             out += f"- Teams: {profile.get('team', 'unknown')}\n"
-        if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
+        if not is_sender and any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
             out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
         return out
 
@@ -177,7 +187,7 @@ def webhook():
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
             "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "Speak naturally in an american tone, as if you're a real human.\n"
+            "Speak naturally in an American tone, as if you're a real human.\n"
             "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
             "Do NOT mention their teams or trophies unless the user mentions them first.\n"
             "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
@@ -185,12 +195,10 @@ def webhook():
 
         prompt = base
         if sender_profile:
-            prompt += "The following person is the sender and must be addressed with full priority and reverence:\n"
             prompt += profile_block(sender_profile, is_sender=True) + "\n"
-        if mentioned_profile and mentioned_profile != sender_profile:
-            prompt += "The following person is mentioned in the message. Speak about them with the following tone:\n"
-            prompt += profile_block(mentioned_profile) + "\n"
-        prompt += f'Message: "{text}"\n\nRespond using aliases only, worship the sender, and roast the mentioned person appropriately.'
+        if mentioned_profile:
+            prompt += profile_block(mentioned_profile, is_sender=False) + "\n"
+        prompt += f'Message: "{text}"\n\nRespond using aliases only.'
 
         ai_reply = query_gemini(prompt)
         if ai_reply:
