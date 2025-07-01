@@ -148,20 +148,21 @@ def webhook():
     normalized_sender = normalize_name(sender)
     sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
-    mentioned_profile = None
+    # Detect multiple mentioned profiles
+    mentioned_profiles = set()
+
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
         if re.search(pattern, text, flags=re.IGNORECASE):
             if not sender_profile or profile != sender_profile:
-                mentioned_profile = profile
-                break
+                mentioned_profiles.add(profile)
 
-    if not mentioned_profile:
+    # If no aliases found, check teams
+    if not mentioned_profiles:
         for team_name, profile in TEAM_TO_PROFILE.items():
             if team_name in text_lower:
                 if not sender_profile or profile != sender_profile:
-                    mentioned_profile = profile
-                    break
+                    mentioned_profiles.add(profile)
 
     reply = None
 
@@ -183,28 +184,23 @@ def webhook():
             "- Limit your reply to 2–4 sentences. No long monologues.\n"
             "- You are not writing a character report. You are having a short, sarcastic chat.\n"
             "- Refer to people only using their aliases.\n"
-            "- DO NOT mention a person’s trophies or teams unless they are explicitly mentioned by the user.\n"
+            "- DO NOT mention a person’s trophies or teams unless they are explicitly mentioned by the user.\n\n"
         )
 
         if sender_profile:
             prompt += "The sender of the message is someone you know:\n"
             prompt += profile_block(sender_profile, is_sender=True) + "\n"
 
-        if mentioned_profile:
-            prompt += "They mentioned another person you know:\n"
-            prompt += profile_block(mentioned_profile) + "\n"
+        if mentioned_profiles:
+            prompt += "They mentioned these people:\n"
+            for prof in mentioned_profiles:
+                prompt += profile_block(prof) + "\n"
 
-        prompt += (
-            "\nHere is the message they sent you:\n"
-            f'"{text}"\n\n'
-            "Now respond sarcastically as GreggBot. Keep it short, sharp, and contextual."
-        )
+        prompt += f"\nHere is the message they sent you:\n\"{text}\"\n\n"
+        prompt += "Now respond sarcastically as GreggBot. Keep it short, sharp, and contextual."
 
         ai_reply = query_gemini(prompt)
-        if ai_reply:
-            reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*"
-        else:
-            reply = "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
+        reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*" if ai_reply else "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
 
     else:
         if "itzaroni" in text_lower:
