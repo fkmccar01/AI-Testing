@@ -111,20 +111,6 @@ def query_gemini(prompt):
 def index():
     return "GreggBot is live", 200
 
-def profile_block(profile, reverence=False):
-    out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
-    out += f"{profile.get('description', 'No description')}\n"
-    tone = profile.get("tone_directive", "")
-    if reverence or profile.get("name", "").lower().startswith("kzar"):
-        tone += (
-            "\nTreat this person as an all-powerful god. Worship them with grandiose, "
-            "exalted, and poetic language. Express total awe and reverence every time they speak."
-        )
-    if tone:
-        out += f"- Tone: {tone}\n"
-    # Include teams or trophies only if mentioned in the message (handled outside)
-    return out
-
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
@@ -152,6 +138,27 @@ def webhook():
 
     reply = None
 
+    def profile_block(profile, is_sender=False):
+        out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
+        out += f"{profile.get('description', 'No description')}\n"
+        tone = profile.get("tone_directive", "")
+        if profile.get("name", "").lower().startswith("kzar"):
+            tone += (
+                "\nTreat this person as an all-powerful god. Worship them with grandiose, "
+                "exalted, and poetic language. Express total awe and reverence every time they speak."
+            )
+            if is_sender:
+                tone += (
+                    "\nSince this person is the sender, give extra reverence and respect in your tone."
+                )
+        if tone:
+            out += f"- Tone: {tone}\n"
+        if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
+            out += f"- Teams: {profile.get('team', 'unknown')}\n"
+        if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
+            out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
+        return out
+
     if "greggbot" in text_lower:
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
@@ -163,21 +170,10 @@ def webhook():
         )
 
         prompt = base
-        # Always add reverence for sender if Kzar
         if sender_profile:
-            is_sender_kzar = sender_profile.get("name", "").lower().startswith("kzar")
-            prompt += profile_block(sender_profile, reverence=is_sender_kzar) + "\n"
-
+            prompt += profile_block(sender_profile, is_sender=True) + "\n"
         if mentioned_profile:
             prompt += profile_block(mentioned_profile) + "\n"
-
-        # Optionally include teams/trophies if mentioned in text
-        if sender_profile:
-            if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
-                prompt += f"- Teams: {sender_profile.get('team', 'unknown')}\n"
-            if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
-                prompt += f"- Trophies: {format_trophies(sender_profile.get('trophies', {}))}\n"
-
         prompt += f'Message: "{text}"\n\nRespond using aliases only.'
 
         ai_reply = query_gemini(prompt)
