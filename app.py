@@ -103,12 +103,16 @@ def webhook():
     text = data.get("text", "")
     text_lower = text.lower()
 
+    # DEBUG: print exact sender string to logs
+    print(f"DEBUG: Incoming sender: '{sender}'")
+    print(f"DEBUG: Incoming text: '{text}'")
+
     if sender.lower() == "greggbot":
         return "", 200
 
     reply = None
 
-    # Identify sender profile by GroupMe handle (name field)
+    # Identify sender profile by exact GroupMe handle (including emojis)
     sender_profile = NAME_TO_PROFILE.get(sender.strip().lower())
 
     # Detect if someone else is being mentioned via alias
@@ -125,7 +129,7 @@ def webhook():
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
             "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "Speak naturally in an american tone, as if you're a real human.\n"
+            "Speak naturally, as if you're a real human.\n"
             "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
             "Do NOT mention their teams or trophies unless the user mentions them first.\n"
             "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
@@ -137,10 +141,8 @@ def webhook():
             tone = profile.get("tone_directive")
             if tone:
                 out += f"- Tone: {tone}\n"
-            # Add team info only if mentioned in the text
             if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
                 out += f"- Teams: {profile.get('team', 'unknown')}\n"
-            # Add trophies info only if mentioned in the text
             if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
                 out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
             return out
