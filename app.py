@@ -47,29 +47,16 @@ def send_groupme_message(text):
 with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
 
+# Build mappings for quick lookup
+NAME_TO_PROFILE = {profile["name"].strip().lower(): profile for profile in PROFILES.values()}
+
+ALIAS_TO_PROFILE = {}
+for profile in PROFILES.values():
+    for alias in profile.get("aliases", []):
+        ALIAS_TO_PROFILE[alias.strip().lower()] = profile
+
 def strip_trophy_emojis(name):
     return re.sub(r"[\ud83c\udfc6\ud83e\udd44]", "", name).strip()
-
-def build_alias_map(profiles):
-    alias_map = {}
-    for profile in profiles.values():
-        name = profile.get("name", "").strip().lower()
-        if name:
-            alias_map[name] = profile
-        for alias in profile.get("aliases", []):
-            alias_map[alias.strip().lower()] = profile
-    return alias_map
-
-ALIAS_TO_PROFILE = build_alias_map(PROFILES)
-
-def find_profile_by_alias(name):
-    if not name:
-        return None
-    name_lower = name.strip().lower()
-    if name_lower in ALIAS_TO_PROFILE:
-        return ALIAS_TO_PROFILE[name_lower]
-    stripped = strip_trophy_emojis(name_lower)
-    return ALIAS_TO_PROFILE.get(stripped)
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -124,16 +111,20 @@ def webhook():
 
     reply = None
 
-    if "greggbot" in text_lower:
-        sender_profile = find_profile_by_alias(sender)
-        mentioned_profile = None
+    # Identify sender profile by GroupMe handle (name field)
+    sender_profile = NAME_TO_PROFILE.get(sender.strip().lower())
 
-        for alias in ALIAS_TO_PROFILE:
-            pattern = r'\b' + re.escape(alias) + r'\b'
-            if re.search(pattern, text, flags=re.IGNORECASE) and alias != sender.lower():
-                mentioned_profile = ALIAS_TO_PROFILE[alias]
+    # Detect if someone else is being mentioned via alias
+    mentioned_profile = None
+    for alias, profile in ALIAS_TO_PROFILE.items():
+        pattern = r'\b' + re.escape(alias) + r'\b'
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            # Avoid tagging sender as mentioned if same person
+            if not sender_profile or profile != sender_profile:
+                mentioned_profile = profile
                 break
 
+    if "greggbot" in text_lower:
         base = (
             "You are GreggBot, a friendly but sometimes sarcastic AI chatbot.\n"
             "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
@@ -144,7 +135,9 @@ def webhook():
         def profile_block(profile):
             out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
             out += f"{profile.get('description', 'No description')}\n"
-            out += f"- Tone: {profile.get('tone_directive', '')}\n"
+            tone = profile.get("tone_directive")
+            if tone:
+                out += f"- Tone: {tone}\n"
             if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
                 out += f"- Teams: {profile.get('team', 'unknown')}\n"
             if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
@@ -158,16 +151,16 @@ def webhook():
                 profile_block(mentioned_profile) + "\n" +
                 f'Message: "{text}"\n\nRespond using aliases only.'
             )
-        elif mentioned_profile:
-            prompt = (
-                base +
-                profile_block(mentioned_profile) + "\n" +
-                f'Message: "{text}"\n\nRespond using aliases only.'
-            )
         elif sender_profile:
             prompt = (
                 base +
                 profile_block(sender_profile) + "\n" +
+                f'Message: "{text}"\n\nRespond using aliases only.'
+            )
+        elif mentioned_profile:
+            prompt = (
+                base +
+                profile_block(mentioned_profile) + "\n" +
                 f'Message: "{text}"\n\nRespond using aliases only.'
             )
         else:
