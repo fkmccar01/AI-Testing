@@ -48,12 +48,15 @@ with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
 
 # Build mappings for quick lookup
-NAME_TO_PROFILE = {profile["name"].strip().lower(): profile for profile in PROFILES.values()}
+def normalize_name(name):
+    return name.strip().lower()
+
+NAME_TO_PROFILE = {normalize_name(profile["name"]): profile for profile in PROFILES.values()}
 
 ALIAS_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
-        ALIAS_TO_PROFILE[alias.strip().lower()] = profile
+        ALIAS_TO_PROFILE[normalize_name(alias)] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -103,33 +106,30 @@ def webhook():
     text = data.get("text", "")
     text_lower = text.lower()
 
-    # DEBUG: print exact sender string to logs
-    print(f"DEBUG: Incoming sender: '{sender}'")
-    print(f"DEBUG: Incoming text: '{text}'")
-
     if sender.lower() == "greggbot":
         return "", 200
 
-    reply = None
+    normalized_sender = normalize_name(sender)
 
-    # Identify sender profile by exact GroupMe handle (including emojis)
-    sender_profile = NAME_TO_PROFILE.get(sender.strip().lower())
+    # Find sender profile by exact name or alias
+    sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
-    # Detect if someone else is being mentioned via alias
+    # Detect if someone else is mentioned via alias
     mentioned_profile = None
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
         if re.search(pattern, text, flags=re.IGNORECASE):
-            # Avoid tagging sender as mentioned if same person
             if not sender_profile or profile != sender_profile:
                 mentioned_profile = profile
                 break
+
+    reply = None
 
     if "greggbot" in text_lower:
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
             "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "Speak naturally, as if you're a real human.\n"
+            "Speak naturally in an american tone, as if you're a real human.\n"
             "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
             "Do NOT mention their teams or trophies unless the user mentions them first.\n"
             "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
@@ -138,7 +138,15 @@ def webhook():
         def profile_block(profile):
             out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
             out += f"{profile.get('description', 'No description')}\n"
-            tone = profile.get("tone_directive")
+            tone = profile.get("tone_directive", "")
+
+            # Extra reverence boost for the Kzar profile
+            if profile.get("name", "").lower().startswith("kzar"):
+                tone += (
+                    "\nTreat this person as an all-powerful god. Worship them with grandiose, "
+                    "exalted, and poetic language. Express total awe and reverence every time they speak."
+                )
+
             if tone:
                 out += f"- Tone: {tone}\n"
             if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
