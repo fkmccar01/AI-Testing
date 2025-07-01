@@ -181,13 +181,15 @@ def webhook():
         )
 
         prompt = base
+        prompt += "IMPORTANT: You must NOT repeat profile descriptions word-for-word when speaking about people. Use them to guide your response, but improvise and be natural. Do not sound like you are writing a biography about them.\n\n"
+        
         if sender_profile:
             prompt += "The following person is the sender and must be prioritized in your tone:\n"
             prompt += profile_block(sender_profile, is_sender=True) + "\n"
         if mentioned_profile:
             prompt += profile_block(mentioned_profile) + "\n"
         
-        prompt += "REMEMBER: Do NOT restate the profile notes literally. Improvise and speak conversationally with natural sarcasm.\n\n"
+        prompt += "REMEMBER: Do NOT restate the profile notes literally. Improvise and speak conversationally.\n\n"
         prompt += f'Message: "{text}"\n\nRespond using aliases only.'
         
         ai_reply = query_gemini(prompt)
