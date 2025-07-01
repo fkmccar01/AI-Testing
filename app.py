@@ -4,6 +4,7 @@ import requests
 import json
 import random
 import re
+import unicodedata
 
 app = Flask(__name__)
 
@@ -47,9 +48,19 @@ def send_groupme_message(text):
 with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
 
-# Build mappings for quick lookup
-NAME_TO_PROFILE = {profile["name"].strip().lower(): profile for profile in PROFILES.values()}
+# Helper function to normalize names by removing emojis/special chars and lowercasing
+def normalize_name(name):
+    # Remove symbols categorized as 'So' (Symbol, Other), which often include emojis
+    cleaned = ''.join(
+        c for c in unicodedata.normalize('NFKD', name)
+        if unicodedata.category(c)[0] != 'So'
+    )
+    return cleaned.strip().lower()
 
+# Build mappings for quick lookup using normalized names
+NAME_TO_PROFILE = {normalize_name(profile["name"]): profile for profile in PROFILES.values()}
+
+# Aliases usually do not have emojis, so keep this simple
 ALIAS_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
@@ -111,8 +122,8 @@ def webhook():
 
     reply = None
 
-    # Identify sender profile by GroupMe handle (name field)
-    sender_profile = NAME_TO_PROFILE.get(sender.strip().lower())
+    # Normalize sender name for profile lookup
+    sender_profile = NAME_TO_PROFILE.get(normalize_name(sender))
 
     # Detect if someone else is being mentioned via alias
     mentioned_profile = None
@@ -140,8 +151,10 @@ def webhook():
             tone = profile.get("tone_directive")
             if tone:
                 out += f"- Tone: {tone}\n"
+            # Check if teams mentioned in text before including them
             if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
                 out += f"- Teams: {profile.get('team', 'unknown')}\n"
+            # Check if trophies mentioned in text before including them
             if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
                 out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
             return out
