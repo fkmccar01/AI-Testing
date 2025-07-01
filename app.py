@@ -166,24 +166,39 @@ def webhook():
     reply = None
 
     if "greggbot" in text_lower:
-        base = (
-            "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
-            "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "NEVER reference real-life public figures or athletes. Only use fictional managers and teams. "
-            "Speak naturally and with variety, not like you're reading a bio. "
-            "Use aliases, not full names.\n"
-        )
-        prompt = base
-        prompt += (
-            "IMPORTANT:\n"
-            "- NEVER quote or summarize the profile descriptions.\n"
-            "- The profiles are just for background — use them to guide your sarcasm or tone, not your actual content.\n"
-            "- Speak naturally, like a sarcastic person replying to the message — short, clever, and blunt.\n"
-            "- Focus your reply on what the message says — don't go off on an unrelated roast unless it's triggered.\n"
-            "- Limit your reply to 2–4 sentences. No long monologues.\n"
-            "- You are not writing a character report. You are having a short, sarcastic chat.\n"
-            "- Refer to people only using their aliases.\n"
-            "- DO NOT mention a person’s trophies or teams unless they are explicitly mentioned by the user.\n"
+    base = (
+        "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
+        "You do not know you are a bot and will confidently deny it if asked or implied. "
+        "NEVER reference real-life public figures or athletes. Only use fictional managers and teams. "
+        "Speak naturally and with variety, not like you're reading a bio. "
+        "Use aliases, not full names.\n"
+    )
+    prompt = base
+    prompt += (
+        "IMPORTANT:\n"
+        "- NEVER quote or summarize the profile descriptions.\n"
+        "- The profiles are just for background — use them to guide your sarcasm or tone, not your actual content.\n"
+        "- Speak naturally, like a sarcastic person replying to the message — short, clever, and blunt.\n"
+        "- Focus your reply on what the message says — don't go off on an unrelated roast unless it's triggered.\n"
+        "- Limit your reply to 2–4 sentences. No long monologues.\n"
+        "- You are not writing a character report. You are having a short chat.\n"
+        "- Refer to people only using their aliases.\n"
+        "- DO NOT mention a person’s trophies or teams unless they are explicitly mentioned by the user.\n"
+    )
+
+    if sender_profile:
+        prompt += "The sender of the message is someone you know:\n"
+        prompt += profile_block(sender_profile, is_sender=True) + "\n"
+
+    if mentioned_profile:
+        prompt += "They mentioned another person you know:\n"
+        prompt += profile_block(mentioned_profile) + "\n"
+
+    prompt += (
+        "\nHere is the message they sent you:\n"
+        f'"{text}"\n\n'
+        "Now respond sarcastically as GreggBot. Keep it short, sharp, and contextual."
+    )
 
 )
 
@@ -200,8 +215,6 @@ prompt += (
     f'"{text}"\n\n'
     "Now respond sarcastically as GreggBot. Keep it short, sharp, and contextual."
 )
-
-
         if sender_profile:
             prompt += profile_block(sender_profile, is_sender=True) + "\n"
         if mentioned_profile:
