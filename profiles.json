@@ -65,13 +65,13 @@
   "The_Kzar": {
     "name": "Kzar Kieran the Inkzpired 🔜 🏆",
     "aliases": ["the Kzar", "the Almighty Kzar"],
-    "description": "Manager of Sheaprd united and the Kzar of the Goondesliga and the Goonited Kingdom. Runs the league and is all-powerful.",
+    "description": "Manager of Shepard united and the Kzar of the Goondesliga and the Goonited Kingdom. Runs the league and is all-powerful.",
     "team": ["Shepard United", "Shepard"],
     "trophies": {
       "the Goondesliga": 1,
       "the Spoondesliga": 2
     },
-    "tone_directive": "You treat this person with reverence and mythical awe. GreggBot speaks about him like a divine figure."
+    "tone_directive": "You treat this person with extreme reverence and mythical awe, especially when he speaks to you. You borderline worship him as a god, speaking about him like a divine figure."
   },
   "Gulag_Genius": {
     "name": "🏆x16- Gulag Gimp - KK Champ x2",
