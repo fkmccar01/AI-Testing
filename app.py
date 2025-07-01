@@ -44,15 +44,11 @@ def send_groupme_message(text):
 
 def remove_emojis(text):
     emoji_pattern = re.compile(
-        "["
-        "\U0001F600-\U0001F64F"
-        "\U0001F300-\U0001F5FF"
-        "\U0001F680-\U0001F6FF"
-        "\U0001F1E0-\U0001F1FF"
-        "\U00002700-\U000027BF"
-        "\U0001F900-\U0001F9FF"
-        "\U00002600-\U000026FF"
-        "\U0001FA70-\U0001FAFF"
+        "[" 
+        "\U0001F600-\U0001F64F" "\U0001F300-\U0001F5FF"
+        "\U0001F680-\U0001F6FF" "\U0001F1E0-\U0001F1FF"
+        "\U00002700-\U000027BF" "\U0001F900-\U0001F9FF"
+        "\U00002600-\U000026FF" "\U0001FA70-\U0001FAFF"
         "\U000025A0-\U000025FF"
         "]+", flags=re.UNICODE)
     return emoji_pattern.sub(r'', text)
@@ -70,12 +66,8 @@ TEAM_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
         ALIAS_TO_PROFILE[normalize_name(alias)] = profile
-    teams = profile.get("team", [])
-    if isinstance(teams, list):
-        for team in teams:
-            TEAM_TO_PROFILE[normalize_name(team)] = profile
-    elif isinstance(teams, str):
-        TEAM_TO_PROFILE[normalize_name(teams)] = profile
+    for team in profile.get("team", []):
+        TEAM_TO_PROFILE[normalize_name(team)] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -97,6 +89,32 @@ def format_trophies(trophies):
         else:
             parts.append(f"{key} ({val})")
     return ", ".join(parts)
+
+def profile_block(profile, is_sender=False):
+    out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
+    description = profile.get('description', 'No description')
+    if isinstance(description, list):
+        for bullet in description:
+            out += f"- {bullet}\n"
+    else:
+        out += f"{description}\n"
+
+    tone = profile.get("tone_directive", "")
+    if "kzar" in profile.get("name", "").lower():
+        tone += (
+            "\nThis person is the Kzar — treat them as a god. Speak with extreme reverence. "
+            "Praise them profusely in your response, especially when they address you. "
+            "Refer to them as 'the Kzar' and show subservience at all times."
+        )
+        if is_sender:
+            tone += "\nSince this person is the sender, give EXTRA reverence and honor their words."
+    if tone:
+        if isinstance(tone, list):
+            for t in tone:
+                out += f"- Tone: {t}\n"
+        else:
+            out += f"- Tone: {tone}\n"
+    return out
 
 def query_gemini(prompt):
     headers = {"Content-Type": "application/json"}
@@ -128,7 +146,6 @@ def webhook():
         return "", 200
 
     normalized_sender = normalize_name(sender)
-
     sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
     mentioned_profile = None
@@ -148,73 +165,33 @@ def webhook():
 
     reply = None
 
-def profile_block(profile, is_sender=False):
-    out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
-    description = profile.get('description', 'No description')
-    # Handle bullet list or string
-    if isinstance(description, list):
-        for bullet in description:
-            out += f"- {bullet}\n"
-    else:
-        # fallback if description is string
-        out += f"{description}\n"
-
-    tone = profile.get("tone_directive", "")
-    if "kzar" in profile.get("name", "").lower():
-        tone += (
-            "\nThis person is the Kzar — treat them as a god. Speak with extreme reverence. "
-            "Praise them profusely in your response, especially when they address you. "
-            "Refer to them as 'the Kzar' and show subservience at all times."
-        )
-        if is_sender:
-            tone += (
-                "\nSince this person is the sender, give EXTRA reverence and honor their words."
-            )
-    if tone:
-        out += f"- Tone: {tone}\n"
-    if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
-        out += f"- Teams: {profile.get('team', 'unknown')}\n"
-    if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
-        out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
-    return out
-
     if "greggbot" in text_lower:
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
             "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "NEVER reference real-life public figures, athletes, or celebrities. Only use fictional managers and teams from the league. Do NOT mention real players like Messi, Ronaldo, Thierry Henry, etc.\n" 
-            "Speak naturally and with variety, as if you're a real human.\n"
-            "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
-            "Do NOT mention their teams or trophies unless the user mentions them first.\n"
+            "NEVER reference real-life public figures or athletes. Only use fictional managers and teams. "
+            "Speak naturally and with variety, not like you're reading a bio. "
+            "Use aliases, not full names.\n"
         )
+        prompt = base + "\nIMPORTANT: Do NOT repeat profile notes word-for-word. Improvise naturally.\n\n"
 
-        prompt = base
-        prompt += "IMPORTANT: You must NOT repeat profile descriptions word-for-word when speaking about people. Use them for background context, but improvise and be natural. Do not sound like you are writing a biography about them.\n\n"
-        
         if sender_profile:
-            prompt += "The following person is the sender and must be prioritized in your tone:\n"
             prompt += profile_block(sender_profile, is_sender=True) + "\n"
         if mentioned_profile:
             prompt += profile_block(mentioned_profile) + "\n"
-        
-        prompt += "REMEMBER: Do NOT restate the profile notes literally. Improvise and speak conversationally.\n\n"
+
         prompt += f'Message: "{text}"\n\nRespond using aliases only.'
-        
+
         ai_reply = query_gemini(prompt)
-        if ai_reply:
-            reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*"
-        else:
-            reply = "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
+        reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*" if ai_reply else "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
 
     else:
         if "itzaroni" in text_lower:
             reply = f"*Beep Boop* {get_itzaroni_reply()} *Beep Boop*"
         elif "pistol pail" in text_lower:
             reply = f"*Beep Boop* {random.choice(pistol_pail_insults)} *Beep Boop*"
-        elif "silver" in text_lower:
-            reply = "*Beep Boop* Silver? Paging Pistol Pail! *Beep Boop*"
-        elif "2nd" in text_lower or "second" in text_lower:
-            reply = "*Beep Boop* 2nd? Paging Pistol Pail! *Beep Boop*"
+        elif "silver" in text_lower or "2nd" in text_lower or "second" in text_lower:
+            reply = "*Beep Boop* Paging Pistol Pail! 🥈 *Beep Boop*"
         elif "kzar" in text_lower:
             reply = f"*Beep Boop* {get_kzar_reply()} *Beep Boop*"
         elif "franzia" in text_lower and "title" in text_lower:
