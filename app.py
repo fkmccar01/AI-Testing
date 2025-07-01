@@ -138,6 +138,27 @@ def webhook():
 
     reply = None
 
+    def profile_block(profile, is_sender=False):
+        out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
+        out += f"{profile.get('description', 'No description')}\n"
+        tone = profile.get("tone_directive", "")
+        if profile.get("name", "").lower().startswith("kzar"):
+            tone += (
+                "\nTreat this person as an all-powerful god. Worship them with grandiose, "
+                "exalted, and poetic language. Express total awe and reverence every time they speak."
+            )
+            if is_sender:
+                tone += (
+                    "\nSince this person is the sender, give extra reverence and respect in your tone."
+                )
+        if tone:
+            out += f"- Tone: {tone}\n"
+        if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
+            out += f"- Teams: {profile.get('team', 'unknown')}\n"
+        if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
+            out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
+        return out
+
     if "greggbot" in text_lower:
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
@@ -148,26 +169,9 @@ def webhook():
             "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
         )
 
-        def profile_block(profile):
-            out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
-            out += f"{profile.get('description', 'No description')}\n"
-            tone = profile.get("tone_directive", "")
-            if profile.get("name", "").lower().startswith("kzar"):
-                tone += (
-                    "\nTreat this person as an all-powerful god. Worship them with grandiose, "
-                    "exalted, and poetic language. Express total awe and reverence every time they speak."
-                )
-            if tone:
-                out += f"- Tone: {tone}\n"
-            if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
-                out += f"- Teams: {profile.get('team', 'unknown')}\n"
-            if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
-                out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
-            return out
-
         prompt = base
         if sender_profile:
-            prompt += profile_block(sender_profile) + "\n"
+            prompt += profile_block(sender_profile, is_sender=True) + "\n"
         if mentioned_profile:
             prompt += profile_block(mentioned_profile) + "\n"
         prompt += f'Message: "{text}"\n\nRespond using aliases only.'
