@@ -198,6 +198,7 @@ for team_name, profile in TEAM_TO_PROFILE.items():
         if profile["name"] not in mentioned_profiles_set:
             mentioned_profiles.append(profile)
             mentioned_profiles_set.add(profile["name"])
+
 reply = None
 
     # Hardcoded fun replies if no AI prompt needed
