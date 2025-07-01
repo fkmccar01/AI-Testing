@@ -44,11 +44,17 @@ def send_groupme_message(text):
 
 def remove_emojis(text):
     emoji_pattern = re.compile(
-        "[" "\U0001F600-\U0001F64F" "\U0001F300-\U0001F5FF"
-        "\U0001F680-\U0001F6FF" "\U0001F1E0-\U0001F1FF"
-        "\U00002700-\U000027BF" "\U0001F900-\U0001F9FF"
-        "\U00002600-\U000026FF" "\U0001FA70-\U0001FAFF"
-        "\U000025A0-\U000025FF" "]+", flags=re.UNICODE)
+        "["
+        "\U0001F600-\U0001F64F"
+        "\U0001F300-\U0001F5FF"
+        "\U0001F680-\U0001F6FF"
+        "\U0001F1E0-\U0001F1FF"
+        "\U00002700-\U000027BF"
+        "\U0001F900-\U0001F9FF"
+        "\U00002600-\U000026FF"
+        "\U0001FA70-\U0001FAFF"
+        "\U000025A0-\U000025FF"
+        "]+", flags=re.UNICODE)
     return emoji_pattern.sub(r'', text)
 
 def normalize_name(name):
@@ -64,12 +70,12 @@ TEAM_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
         ALIAS_TO_PROFILE[normalize_name(alias)] = profile
-    team_field = profile.get("team", "")
-    if isinstance(team_field, str):
-        TEAM_TO_PROFILE[normalize_name(team_field)] = profile
-    elif isinstance(team_field, list):
-        for team_name in team_field:
-            TEAM_TO_PROFILE[normalize_name(team_name)] = profile
+    teams = profile.get("team", [])
+    if isinstance(teams, list):
+        for team in teams:
+            TEAM_TO_PROFILE[normalize_name(team)] = profile
+    elif isinstance(teams, str):
+        TEAM_TO_PROFILE[normalize_name(teams)] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -80,8 +86,7 @@ def format_trophies(trophies):
         return "no trophies"
     parts = []
     for key, val in trophies.items():
-        key_lower = key.lower()
-        if key_lower.startswith("the kzars_kzup"):
+        if key.lower().startswith("the kzars_kzup"):
             if isinstance(val, list):
                 editions = ', '.join(val)
                 parts.append(f"Kzar’s Kzup (won editions: {editions})")
@@ -127,8 +132,6 @@ def webhook():
     sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
     mentioned_profile = None
-
-    # Check for alias matches
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
         if re.search(pattern, text, flags=re.IGNORECASE):
@@ -136,7 +139,6 @@ def webhook():
                 mentioned_profile = profile
                 break
 
-    # If no alias match, check for team mentions
     if not mentioned_profile:
         for team_name, profile in TEAM_TO_PROFILE.items():
             if team_name in text_lower:
@@ -150,14 +152,15 @@ def webhook():
         out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
         out += f"{profile.get('description', 'No description')}\n"
         tone = profile.get("tone_directive", "")
-        if profile.get("name", "").lower().startswith("kzar"):
+        if "kzar" in profile.get("name", "").lower():
             tone += (
-                "\nTreat this person as an all-powerful god. Worship them with grandiose, "
-                "exalted, and poetic language. Express total awe and reverence every time they speak."
+                "\nThis person is the Kzar — treat them as a god. Speak with extreme reverence. "
+                "Praise them profusely in your response, especially when they address you. "
+                "Refer to them as 'the Kzar' and show subservience at all times."
             )
             if is_sender:
                 tone += (
-                    "\nSince this person is the sender, give extra reverence and respect in your tone."
+                    "\nSince this person is the sender, give EXTRA reverence and honor their words."
                 )
         if tone:
             out += f"- Tone: {tone}\n"
@@ -179,6 +182,7 @@ def webhook():
 
         prompt = base
         if sender_profile:
+            prompt += "The following person is the sender and must be prioritized in your tone:\n"
             prompt += profile_block(sender_profile, is_sender=True) + "\n"
         if mentioned_profile:
             prompt += profile_block(mentioned_profile) + "\n"
