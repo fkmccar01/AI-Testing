@@ -178,7 +178,6 @@ def webhook():
             "Speak naturally in an american tone, as if you're a real human.\n"
             "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
             "Do NOT mention their teams or trophies unless the user mentions them first.\n"
-            "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
         )
 
         prompt = base
