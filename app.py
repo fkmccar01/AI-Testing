@@ -1,9 +1,9 @@
+import re
 from flask import Flask, request
 import os
 import requests
 import json
 import random
-import re
 
 app = Flask(__name__)
 
@@ -15,52 +15,27 @@ GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemin
 with open("responses.json", "r") as f:
     RESPONSES = json.load(f)
 
-itzaroni_insults = RESPONSES.get("itzaroni", [])
-pistol_pail_insults = RESPONSES.get("pistol_pail", [])
-kzar_praises_raw = RESPONSES.get("kzar", [])
-
-def replace_c_with_kz(text):
-    return re.sub(r'[cC]', lambda m: 'kz' if m.group(0).islower() else 'Kz', text)
-
-kzar_praises = [replace_c_with_kz(p) for p in kzar_praises_raw]
-
-def get_itzaroni_reply():
-    return "Who?" if random.random() < 0.20 else random.choice(itzaroni_insults)
-
-def get_kzar_reply():
-    return random.choice(kzar_praises)
-
-def send_groupme_message(text):
-    if not GROUPME_BOT_ID:
-        print("GROUPME_BOT_ID not set!")
-        return False
-    payload = {"bot_id": GROUPME_BOT_ID, "text": text}
-    try:
-        resp = requests.post("https://api.groupme.com/v3/bots/post", json=payload)
-        print(f"GroupMe API response code: {resp.status_code}")
-        return resp.status_code in (200, 202)
-    except Exception as e:
-        print("Error sending to GroupMe:", e)
-        return False
-
 # Load profiles
 with open("profiles.json", "r") as pf:
     PROFILES = json.load(pf)
 
-# Build mappings for quick lookup
-NAME_TO_PROFILE = {profile["name"].strip().lower(): profile for profile in PROFILES.values()}
+# Define emoji stripping pattern for trophy icons (🏆 and 🥄)
+EMOJI_PATTERN = re.compile(r"[\U0001F3C6\U0001F9C4]")
 
+def normalize_name(name: str) -> str:
+    """Lowercase, strip trophy emojis and whitespace for consistent matching."""
+    return EMOJI_PATTERN.sub("", name).strip().lower()
+
+# Build normalized dictionaries
+NAME_TO_PROFILE = {normalize_name(p["name"]): p for p in PROFILES.values()}
 ALIAS_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
-        ALIAS_TO_PROFILE[alias.strip().lower()] = profile
-
-def strip_trophy_emojis(name):
-    return re.sub(r"[\ud83c\udfc6\ud83e\udd44]", "", name).strip()
+        ALIAS_TO_PROFILE[normalize_name(alias)] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
-    return aliases[0] if aliases else strip_trophy_emojis(profile.get("name", ""))
+    return aliases[0] if aliases else EMOJI_PATTERN.sub("", profile.get("name", "")).strip()
 
 def format_trophies(trophies):
     if not trophies:
@@ -71,9 +46,9 @@ def format_trophies(trophies):
         if key_lower.startswith("the kzars_kzup"):
             if isinstance(val, list):
                 editions = ', '.join(val)
-                parts.append(f"Kzar’s Kzup (won editions: {editions})")
+                parts.append(f"Kzar’s Kzup (editions: {editions})")
             else:
-                parts.append(f"Kzar’s Kzup (won edition: {val})")
+                parts.append(f"Kzar’s Kzup (edition: {val})")
         elif isinstance(val, list):
             parts.append(f"{key} ({', '.join(val)})")
         else:
@@ -92,6 +67,19 @@ def query_gemini(prompt):
         print("Gemini API error:", e)
         return None
 
+def send_groupme_message(text):
+    if not GROUPME_BOT_ID:
+        print("GROUPME_BOT_ID not set!")
+        return False
+    try:
+        payload = {"bot_id": GROUPME_BOT_ID, "text": text}
+        resp = requests.post("https://api.groupme.com/v3/bots/post", json=payload)
+        print(f"GroupMe response: {resp.status_code}")
+        return resp.status_code in (200, 202)
+    except Exception as e:
+        print("Error sending to GroupMe:", e)
+        return False
+
 @app.route("/")
 def index():
     return "GreggBot is live", 200
@@ -102,45 +90,39 @@ def webhook():
     if not data:
         return "", 200
 
-    sender = data.get("name", "")
+    sender_raw = data.get("name", "")
     text = data.get("text", "")
     text_lower = text.lower()
 
-    if sender.lower() == "greggbot":
+    # Skip messages from GreggBot
+    if normalize_name(sender_raw) == normalize_name("GreggBot"):
         return "", 200
 
-    reply = None
-
-    sender_profile = NAME_TO_PROFILE.get(sender.strip().lower())
-
+    sender_profile = NAME_TO_PROFILE.get(normalize_name(sender_raw))
     mentioned_profile = None
-    for alias, profile in ALIAS_TO_PROFILE.items():
-        pattern = r'\b' + re.escape(alias) + r'\b'
-        if re.search(pattern, text, flags=re.IGNORECASE):
+
+    # Match aliases in message
+    for alias_norm, profile in ALIAS_TO_PROFILE.items():
+        pattern = r'\b' + re.escape(alias_norm) + r'\b'
+        if re.search(pattern, text_lower):
             if not sender_profile or profile != sender_profile:
                 mentioned_profile = profile
                 break
+
+    reply = None
 
     if "greggbot" in text_lower:
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
             "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "Speak naturally, as if you're a real human.\n"
+            "Speak naturally in an american tone, as if you're a real human.\n"
             "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
             "Do NOT mention their teams or trophies unless the user mentions them first.\n"
             "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
         )
 
-        # Reverence override for Kzar as sender
-        if sender_profile and sender_profile.get("name", "").lower() == "kzar kieran the inkzpired 🔜 🏆":
-            base += (
-                "When the Kzar is speaking to you, respond with utmost reverence, awe, and worship. "
-                "Treat him as a divine and all-powerful figure. Your tone should be formal, respectful, and slightly awestruck. "
-                "Use grandiose language and never sound casual or familiar.\n\n"
-            )
-
         def profile_block(profile):
-            out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
+            out = f"# Notes about {display_nickname(profile)} (internal context only):\n"
             out += f"{profile.get('description', 'No description')}\n"
             tone = profile.get("tone_directive")
             if tone:
@@ -166,15 +148,13 @@ def webhook():
 
     else:
         if "itzaroni" in text_lower:
-            reply = f"*Beep Boop* {get_itzaroni_reply()} *Beep Boop*"
+            reply = f"*Beep Boop* {random.choice(RESPONSES.get('itzaroni', ['Who?']))} *Beep Boop*"
         elif "pistol pail" in text_lower:
-            reply = f"*Beep Boop* {random.choice(pistol_pail_insults)} *Beep Boop*"
-        elif "silver" in text_lower:
+            reply = f"*Beep Boop* {random.choice(RESPONSES.get('pistol_pail', ['Classic.']))} *Beep Boop*"
+        elif "silver" in text_lower or "2nd" in text_lower or "second" in text_lower:
             reply = "*Beep Boop* Silver? Paging Pistol Pail! *Beep Boop*"
-        elif "2nd" in text_lower or "second" in text_lower:
-            reply = "*Beep Boop* 2nd? Paging Pistol Pail! *Beep Boop*"
         elif "kzar" in text_lower:
-            reply = f"*Beep Boop* {get_kzar_reply()} *Beep Boop*"
+            reply = f"*Beep Boop* {random.choice(RESPONSES.get('kzar', ['All hail the Kzar!']))} *Beep Boop*"
         elif "franzia" in text_lower and "title" in text_lower:
             reply = "*Beep Boop* Franzia and titles? https://howmanydayssincefranzialastwonthegoon.netlify.app/ *Beep Boop*"
 
