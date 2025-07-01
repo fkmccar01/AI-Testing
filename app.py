@@ -149,26 +149,34 @@ def webhook():
     reply = None
 
     def profile_block(profile, is_sender=False):
-        out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
-        out += f"{profile.get('description', 'No description')}\n"
-        tone = profile.get("tone_directive", "")
-        if "kzar" in profile.get("name", "").lower():
+    out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
+    description = profile.get('description', 'No description')
+    # Handle bullet list or string
+    if isinstance(description, list):
+        for bullet in description:
+            out += f"- {bullet}\n"
+    else:
+        # fallback if description is string
+        out += f"{description}\n"
+
+    tone = profile.get("tone_directive", "")
+    if "kzar" in profile.get("name", "").lower():
+        tone += (
+            "\nThis person is the Kzar — treat them as a god. Speak with extreme reverence. "
+            "Praise them profusely in your response, especially when they address you. "
+            "Refer to them as 'the Kzar' and show subservience at all times."
+        )
+        if is_sender:
             tone += (
-                "\nThis person is the Kzar — treat them as a god. Speak with extreme reverence. "
-                "Praise them profusely in your response, especially when they address you. "
-                "Refer to them as 'the Kzar' and show subservience at all times."
+                "\nSince this person is the sender, give EXTRA reverence and honor their words."
             )
-            if is_sender:
-                tone += (
-                    "\nSince this person is the sender, give EXTRA reverence and honor their words."
-                )
-        if tone:
-            out += f"- Tone: {tone}\n"
-        if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
-            out += f"- Teams: {profile.get('team', 'unknown')}\n"
-        if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
-            out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
-        return out
+    if tone:
+        out += f"- Tone: {tone}\n"
+    if any(word in text_lower for word in ["team", "malone", "salame", "aquadiq", "woké", "sweatfield", "franzia"]):
+        out += f"- Teams: {profile.get('team', 'unknown')}\n"
+    if any(word in text_lower for word in ["trophy", "title", "goondesliga", "spoondesliga", "kzup"]):
+        out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
+    return out
 
     if "greggbot" in text_lower:
         base = (
