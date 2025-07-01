@@ -181,7 +181,7 @@ def webhook():
         )
 
         prompt = base
-        prompt += "IMPORTANT: You must NOT repeat profile descriptions word-for-word when speaking about people. Use them to guide your response, but improvise and be natural. Do not sound like you are writing a biography about them.\n\n"
+        prompt += "IMPORTANT: You must NOT repeat profile descriptions word-for-word when speaking about people. Use them for background context, but improvise and be natural. Do not sound like you are writing a biography about them.\n\n"
         
         if sender_profile:
             prompt += "The following person is the sender and must be prioritized in your tone:\n"
