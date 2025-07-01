@@ -1,3 +1,4 @@
+
 from flask import Flask, request
 import os
 import requests
@@ -43,7 +44,7 @@ def send_groupme_message(text):
         print("Error sending to GroupMe:", e)
         return False
 
-# Remove emojis and normalize
+# Utility to strip emojis from names
 def remove_emojis(text):
     emoji_pattern = re.compile(
         "["
@@ -69,17 +70,9 @@ with open("profiles.json", "r") as pf:
 NAME_TO_PROFILE = {normalize_name(profile["name"]): profile for profile in PROFILES.values()}
 
 ALIAS_TO_PROFILE = {}
-TEAM_TO_PROFILE = {}
-
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
         ALIAS_TO_PROFILE[normalize_name(alias)] = profile
-    team = profile.get("team", "")
-    if isinstance(team, list):
-        for t in team:
-            TEAM_TO_PROFILE[normalize_name(t)] = profile
-    elif team:
-        TEAM_TO_PROFILE[normalize_name(team)] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -133,25 +126,16 @@ def webhook():
         return "", 200
 
     normalized_sender = normalize_name(sender)
+
     sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
     mentioned_profile = None
-
-    # Check if any known alias is mentioned
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
         if re.search(pattern, text, flags=re.IGNORECASE):
             if not sender_profile or profile != sender_profile:
                 mentioned_profile = profile
                 break
-
-    # If no alias match, try matching on team name
-    if not mentioned_profile:
-        for team_name, profile in TEAM_TO_PROFILE.items():
-            if team_name in text_lower:
-                if not sender_profile or profile != sender_profile:
-                    mentioned_profile = profile
-                    break
 
     reply = None
 
