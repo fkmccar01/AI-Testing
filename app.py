@@ -148,7 +148,7 @@ def webhook():
 
     reply = None
 
-    def profile_block(profile, is_sender=False):
+def profile_block(profile, is_sender=False):
     out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
     description = profile.get('description', 'No description')
     # Handle bullet list or string
