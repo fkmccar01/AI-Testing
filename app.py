@@ -191,21 +191,19 @@ def webhook():
                 mentioned_profiles.append(profile)
                 mentioned_profiles_set.add(profile["name"])
 
-    print("Mentioned profiles detected:", [p["name"] for p in mentioned_profiles])  # Debug line
-
     reply = None
 
     # Hardcoded fun replies if no AI prompt needed
     if "itzaroni" in text_lower:
-        reply = f"*Beep Boop* {get_itzaroni_reply()} *Beep Boop*"
+        raw_reply = get_itzaroni_reply()
     elif "pistol pail" in text_lower:
-        reply = f"*Beep Boop* {get_pistol_pail_reply()} *Beep Boop*"
+        raw_reply = get_pistol_pail_reply()
     elif "silver" in text_lower or "2nd" in text_lower or "second" in text_lower:
-        reply = "*Beep Boop* 2nd? Paging Pistol Pail! *Beep Boop*"
+        raw_reply = "2nd? Paging Pistol Pail!"
     elif "kzar" in text_lower:
-        reply = f"*Beep Boop* {get_kzar_reply()} *Beep Boop*"
+        raw_reply = get_kzar_reply()
     elif "franzia" in text_lower and "title" in text_lower:
-        reply = "*Beep Boop* Franzia and titles? https://howmanydayssincefranzialastwonthegoon.netlify.app/ *Beep Boop*"
+        raw_reply = "Franzia and titles? https://howmanydayssincefranzialastwonthegoon.netlify.app/"
     else:
         # Compose prompt for Gemini
         prompt = (
@@ -226,15 +224,17 @@ def webhook():
 
         ai_reply = query_gemini(prompt)
         if ai_reply:
-            reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*"
+            raw_reply = ai_reply
         else:
-            reply = "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
+            raw_reply = "Sorry, my sarcasm circuit is offline right now."
 
-    if reply:
-        send_groupme_message(reply)
+    # Clean *Beep Boop* wrappers if present, then add exactly one pair
+    cleaned_reply = raw_reply.strip()
+    cleaned_reply = re.sub(r'^\*Beep Boop\*\s*', '', cleaned_reply, flags=re.IGNORECASE)
+    cleaned_reply = re.sub(r'\s*\*Beep Boop\*$', '', cleaned_reply, flags=re.IGNORECASE)
+
+    reply = f"*Beep Boop* {cleaned_reply.strip()} *Beep Boop*"
+
+    send_groupme_message(reply)
 
     return "", 200
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
