@@ -160,25 +160,38 @@ def webhook():
     # Identify sender profile
     sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
-    # Identify mentioned profiles/teams in the message (excluding sender)
+    # Helper to check exact word-boundary mention
+    def is_mentioned(alias_or_team, text):
+        pattern = r'\b' + re.escape(alias_or_team.lower()) + r'\b'
+        return re.search(pattern, text) is not None
+
     mentioned_profiles = []
     mentioned_profiles_set = set()
-    # Check aliases first
+
+    # Check aliases first, excluding ambiguous "gg" unless full name present
     for alias, profile in ALIAS_TO_PROFILE.items():
-        if alias in text_lower:
+        alias_lower = alias.lower()
+        if alias_lower == "gg":
+            full_name_lower = profile["name"].lower()
+            if full_name_lower not in text_lower:
+                continue
+        if is_mentioned(alias_lower, text_lower):
             if sender_profile and profile["name"] == sender_profile["name"]:
                 continue
             if profile["name"] not in mentioned_profiles_set:
                 mentioned_profiles.append(profile)
                 mentioned_profiles_set.add(profile["name"])
+
     # Then check teams
     for team_name, profile in TEAM_TO_PROFILE.items():
-        if team_name in text_lower:
+        if is_mentioned(team_name.lower(), text_lower):
             if sender_profile and profile["name"] == sender_profile["name"]:
                 continue
             if profile["name"] not in mentioned_profiles_set:
                 mentioned_profiles.append(profile)
                 mentioned_profiles_set.add(profile["name"])
+
+    print("Mentioned profiles detected:", [p["name"] for p in mentioned_profiles])  # Debug line
 
     reply = None
 
