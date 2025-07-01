@@ -126,7 +126,9 @@ def webhook():
 
     if "greggbot" in text_lower:
         base = (
-            "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. You do not know you are a bot and will confidently deny it if asked or implied. Speak naturally, as if you're a real human manager.\n"
+            "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
+            "You do not know you are a bot and will confidently deny it if asked or implied. "
+            "Speak naturally, as if you're a real human manager.\n"
             "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
             "Do NOT mention their teams or trophies unless the user mentions them first.\n"
             "Use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
@@ -144,27 +146,12 @@ def webhook():
                 out += f"- Trophies: {format_trophies(profile.get('trophies', {}))}\n"
             return out
 
-        if sender_profile and mentioned_profile:
-            prompt = (
-                base +
-                profile_block(sender_profile) + "\n" +
-                profile_block(mentioned_profile) + "\n" +
-                f'Message: "{text}"\n\nRespond using aliases only.'
-            )
-        elif sender_profile:
-            prompt = (
-                base +
-                profile_block(sender_profile) + "\n" +
-                f'Message: "{text}"\n\nRespond using aliases only.'
-            )
-        elif mentioned_profile:
-            prompt = (
-                base +
-                profile_block(mentioned_profile) + "\n" +
-                f'Message: "{text}"\n\nRespond using aliases only.'
-            )
-        else:
-            prompt = base + f'Message: "{text}"\n\nRespond naturally.'
+        prompt = base
+        if sender_profile:
+            prompt += profile_block(sender_profile) + "\n"
+        if mentioned_profile:
+            prompt += profile_block(mentioned_profile) + "\n"
+        prompt += f'Message: "{text}"\n\nRespond using aliases only.'
 
         ai_reply = query_gemini(prompt)
         if ai_reply:
