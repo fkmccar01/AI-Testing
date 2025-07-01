@@ -111,35 +111,32 @@ def webhook():
 
     reply = None
 
-    # Identify sender profile by GroupMe handle (name field)
     sender_profile = NAME_TO_PROFILE.get(sender.strip().lower())
 
-    # Detect if someone else is being mentioned via alias
     mentioned_profile = None
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
         if re.search(pattern, text, flags=re.IGNORECASE):
-            # Avoid tagging sender as mentioned if same person
             if not sender_profile or profile != sender_profile:
                 mentioned_profile = profile
                 break
 
     if "greggbot" in text_lower:
-        # Base prompt
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
             "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "Speak naturally with an american tone, as if you're a real human.\n"
+            "Speak naturally, as if you're a real human.\n"
             "Use nicknames (aliases) to refer to people, never their full GroupMe handle.\n"
             "Do NOT mention their teams or trophies unless the user mentions them first.\n"
             "ALWAYS use the profile notes below to inform your reply and tone, but do not quote or repeat them verbatim. Speak naturally.\n\n"
         )
 
-        # Add reverence override only if sender is the Kzar
+        # Reverence override for Kzar as sender
         if sender_profile and sender_profile.get("name", "").lower() == "kzar kieran the inkzpired 🔜 🏆":
             base += (
-                "Whenever the Kzar speaks to you, you worship him with extreme reverence and mythical awe. "
-                "You borderline worship him as a god, speaking about him like a divine figure.\n\n"
+                "When the Kzar is speaking to you, respond with utmost reverence, awe, and worship. "
+                "Treat him as a divine and all-powerful figure. Your tone should be formal, respectful, and slightly awestruck. "
+                "Use grandiose language and never sound casual or familiar.\n\n"
             )
 
         def profile_block(profile):
