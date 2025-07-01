@@ -165,32 +165,39 @@ def webhook():
         pattern = r'\b' + re.escape(alias_or_team.lower()) + r'\b'
         return re.search(pattern, text) is not None
 
-    mentioned_profiles = []
-    mentioned_profiles_set = set()
+    import re
 
-    # Check aliases first, excluding ambiguous "gg" unless full name present
-    for alias, profile in ALIAS_TO_PROFILE.items():
-        alias_lower = alias.lower()
-        if alias_lower == "gg":
-            full_name_lower = profile["name"].lower()
-            if full_name_lower not in text_lower:
-                continue
-        if is_mentioned(alias_lower, text_lower):
-            if sender_profile and profile["name"] == sender_profile["name"]:
-                continue
-            if profile["name"] not in mentioned_profiles_set:
-                mentioned_profiles.append(profile)
-                mentioned_profiles_set.add(profile["name"])
+mentioned_profiles = []
+mentioned_profiles_set = set()
 
-    # Then check teams
-    for team_name, profile in TEAM_TO_PROFILE.items():
-        if is_mentioned(team_name.lower(), text_lower):
-            if sender_profile and profile["name"] == sender_profile["name"]:
-                continue
-            if profile["name"] not in mentioned_profiles_set:
-                mentioned_profiles.append(profile)
-                mentioned_profiles_set.add(profile["name"])
+def is_mentioned(alias_or_team, text):
+    # Build a regex pattern with word boundaries, ignoring case
+    pattern = r'\b' + re.escape(alias_or_team.lower()) + r'\b'
+    return re.search(pattern, text) is not None
 
+# Check aliases first, excluding ambiguous "gg"
+for alias, profile in ALIAS_TO_PROFILE.items():
+    alias_lower = alias.lower()
+    if alias_lower == "gg":
+        # Only match if full name is present somewhere instead
+        full_name_lower = profile["name"].lower()
+        if full_name_lower not in text_lower:
+            continue
+    if is_mentioned(alias_lower, text_lower):
+        if sender_profile and profile["name"] == sender_profile["name"]:
+            continue
+        if profile["name"] not in mentioned_profiles_set:
+            mentioned_profiles.append(profile)
+            mentioned_profiles_set.add(profile["name"])
+
+# Then check teams
+for team_name, profile in TEAM_TO_PROFILE.items():
+    if is_mentioned(team_name.lower(), text_lower):
+        if sender_profile and profile["name"] == sender_profile["name"]:
+            continue
+        if profile["name"] not in mentioned_profiles_set:
+            mentioned_profiles.append(profile)
+            mentioned_profiles_set.add(profile["name"])
     reply = None
 
     # Hardcoded fun replies if no AI prompt needed
