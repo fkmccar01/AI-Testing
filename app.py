@@ -1,3 +1,4 @@
+
 from flask import Flask, request
 import os
 import requests
@@ -101,7 +102,18 @@ def webhook():
 
     normalized_sender = normalize_name(sender)
 
-    sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
+    # Try to find sender profile by exact normalized name
+    sender_profile = NAME_TO_PROFILE.get(normalized_sender)
+    # Fallback to alias lookup if not found by name
+    if not sender_profile:
+        sender_profile = ALIAS_TO_PROFILE.get(normalized_sender)
+
+    # DEBUG LOGGING
+    print(f"Sender raw name: '{sender}' | Normalized: '{normalized_sender}'")
+    if sender_profile:
+        print(f"Sender profile found: {sender_profile['name']} with aliases {sender_profile.get('aliases', [])}")
+    else:
+        print("Sender profile NOT found!")
 
     mentioned_profile = None
     for alias, profile in ALIAS_TO_PROFILE.items():
