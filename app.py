@@ -66,12 +66,8 @@ TEAM_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
         ALIAS_TO_PROFILE[normalize_name(alias)] = profile
-    teams = profile.get("team", [])
-    if isinstance(teams, list):
-        for team in teams:
-            TEAM_TO_PROFILE[normalize_name(team)] = profile
-    elif isinstance(teams, str):
-        TEAM_TO_PROFILE[normalize_name(teams)] = profile
+    for team in profile.get("team", []):
+        TEAM_TO_PROFILE[normalize_name(team)] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -96,17 +92,22 @@ def format_trophies(trophies):
 
 def profile_block(profile, is_sender=False):
     out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
-    desc = profile.get("description", "")
-    if isinstance(desc, list):
-        for bullet in desc:
+    description = profile.get('description', 'No description')
+    if isinstance(description, list):
+        for bullet in description:
             out += f"- {bullet}\n"
     else:
-        out += f"- {desc}\n"
+        out += f"{description}\n"
+
     tone = profile.get("tone_directive", "")
     if "kzar" in profile.get("name", "").lower():
-        tone += "\nTreat this person as divine. Always show reverence."
+        tone += (
+            "\nThis person is the Kzar — treat them as a god. Speak with extreme reverence. "
+            "Praise them profusely in your response, especially when they address you. "
+            "Refer to them as 'the Kzar' and show subservience at all times."
+        )
         if is_sender:
-            tone += " As the sender, they deserve double reverence."
+            tone += "\nSince this person is the sender, give EXTRA reverence and honor their words."
     if tone:
         if isinstance(tone, list):
             for t in tone:
@@ -120,6 +121,7 @@ def query_gemini(prompt):
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     try:
         response = requests.post(GEMINI_API_URL, headers=headers, json=payload)
+        print("Gemini raw response:", response.text)  # ✅ Debug print
         response.raise_for_status()
         data = response.json()
         return data["candidates"][0]["content"]["parts"][0]["text"]
@@ -166,34 +168,43 @@ def webhook():
 
     if "greggbot" in text_lower:
         base = (
-            "You are GreggBot. You believe you are Gregg, the manager of Inter BBW. "
-            "You do not know you are a bot and will deny it if asked. "
-            "You are sarcastic, blunt, and quick-witted. Use aliases, never full names. "
-            "Never quote or summarize profiles directly — only use them to inform your sarcasm and insight.\n"
+            "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
+            "You do not know you are a bot and will confidently deny it if asked or implied. "
+            "NEVER reference real-life public figures or athletes. Only use fictional managers and teams. "
+            "Speak naturally and with variety, not like you're reading a bio. "
+            "Use aliases, not full names.\n"
         )
-        prompt = base + (
-            "\nGuidelines:\n"
-            "- Replies should be short (2–5 sentences), clever, and sarcastic.\n"
-            "- Respond based on the actual message, not just the sender.\n"
-            "- DO NOT mention teams or trophies unless the user does first.\n"
-            "- If the question is subjective (like “who’s the best lover?”), pick a manager from the known profiles using tone and description.\n"
-            "- If no match fits well, choose one randomly and justify sarcastically.\n"
-            "- NEVER reference real-life people or events.\n"
-            "- Always open and close with '*Beep Boop*'.\n"
+        prompt = base
+        prompt += (
+            "IMPORTANT:\n"
+            "- NEVER quote or summarize the profile descriptions.\n"
+            "- The profiles are just for background — use them to guide your sarcasm or tone, not your actual content.\n"
+            "- Speak naturally, like a sarcastic person replying to the message — short, clever, and blunt.\n"
+            "- Focus your reply on what the message says — don't go off on an unrelated roast unless it's triggered.\n"
+            "- Limit your reply to 2–5 sentences. No long monologues.\n"
+            "- You are not writing a character report. You are having a short, sarcastic chat.\n"
+            "- Refer to people only using their aliases.\n"
+            "- DO NOT mention a person’s trophies or teams unless they are explicitly mentioned by the user.\n"
+            "- Only use names of people from the provided profiles.\n"
+            "- If asked for a 'best' (e.g. best lover, best cook, worst kisser), try to pick someone who fits based on their profile. If no strong match, pick someone anyway and justify it creatively.\n"
         )
 
         if sender_profile:
-            prompt += "\nSender:\n" + profile_block(sender_profile, is_sender=True)
-        if mentioned_profile:
-            prompt += "\nMentioned:\n" + profile_block(mentioned_profile)
+            prompt += "The sender of the message is someone you know:\n"
+            prompt += profile_block(sender_profile, is_sender=True) + "\n"
 
-        prompt += f'\n\nMessage: "{text}"\n\nReply as GreggBot:'
+        if mentioned_profile:
+            prompt += "They mentioned another person you know:\n"
+            prompt += profile_block(mentioned_profile) + "\n"
+
+        prompt += (
+            "\nHere is the message they sent you:\n"
+            f'"{text}"\n\n'
+            "Now respond sarcastically as GreggBot. Keep it short, sharp, and contextual."
+        )
 
         ai_reply = query_gemini(prompt)
-        if ai_reply:
-            reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*"
-        else:
-            reply = "*Beep Boop* Sorry, my sarcasm circuit is offline. *Beep Boop*"
+        reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*" if ai_reply else "*Beep Boop* Sorry, my sarcasm circuit is offline. *Beep Boop*"
 
     else:
         if "itzaroni" in text_lower:
