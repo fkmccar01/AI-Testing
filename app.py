@@ -128,6 +128,37 @@ def query_gemini(prompt):
         print("Gemini API error:", e)
         return None
 
+def find_most_relevant_profile(message_text):
+    words = set(re.findall(r'\b\w+\b', message_text.lower()))
+    best_score = 0
+    best_profile = None
+
+    for profile in PROFILES.values():
+        combined = []
+
+        desc = profile.get("description", "")
+        if isinstance(desc, list):
+            combined += desc
+        else:
+            combined.append(desc)
+
+        tone = profile.get("tone_directive", "")
+        if isinstance(tone, list):
+            combined += tone
+        else:
+            combined.append(tone)
+
+        profile_words = set()
+        for text in combined:
+            profile_words |= set(re.findall(r'\b\w+\b', text.lower()))
+
+        score = len(words & profile_words)
+        if score > best_score:
+            best_score = score
+            best_profile = profile
+
+    return best_profile
+
 @app.route("/")
 def index():
     return "GreggBot is live", 200
@@ -165,28 +196,23 @@ def webhook():
 
     reply = None
 
-    # Handle special question: who is the best lover?
-    lover_question_patterns = [
-        r'\bbest lover\b',
-        r'who.*best lover',
-        r'who is the best lover',
-        r'who\'s the best lover'
-    ]
-    
-    if any(re.search(pattern, text_lower) for pattern in lover_question_patterns):
-        # Pick a manager known for flirty tone (Angel_of_Dean)
-        lover_profile = PROFILES.get("Angel_of_Dean")
-        if lover_profile:
-            lover_alias = display_nickname(lover_profile)
-            reply = (
-                f"*Beep Boop* If you're asking about the best lover, "
-                f"it's obviously {lover_alias}. "
-                "Just don't tell him I said that, or he'll start flirting with everyone here. *Beep Boop*"
-            )
-
-    # If no special reply yet, handle AI or keyword replies
-    if not reply:
-        if "greggbot" in text_lower:
+    if "greggbot" in text_lower:
+        if re.search(r'\b(best|who|which|top|greatest|favorite|most)\b', text_lower):
+            relevant_profile = find_most_relevant_profile(text_lower)
+            if relevant_profile:
+                alias = display_nickname(relevant_profile)
+                reply = (
+                    f"*Beep Boop* Easy. It’s gotta be {alias}. "
+                    f"Some say their aura alone clears the locker room. *Beep Boop*"
+                )
+            else:
+                random_profile = random.choice(list(PROFILES.values()))
+                alias = display_nickname(random_profile)
+                reply = (
+                    f"*Beep Boop* None of them really earned it, so I'm going with {alias}. "
+                    f"Why? Gut feeling. Deal with it. *Beep Boop*"
+                )
+        else:
             base = (
                 "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
                 "You do not know you are a bot and will confidently deny it if asked or implied. "
@@ -201,11 +227,12 @@ def webhook():
                 "- The profiles are just for background — use them to guide your sarcasm or tone, not your actual content.\n"
                 "- Speak naturally, like a sarcastic person replying to the message — short, clever, and blunt.\n"
                 "- Focus your reply on what the message says — don't go off on an unrelated roast unless it's triggered.\n"
-                "- Limit your reply to 2–4 sentences. No long monologues.\n"
+                "- Limit your reply to 2–5 sentences. No long monologues.\n"
                 "- You are not writing a character report. You are having a short, sarcastic chat.\n"
                 "- Refer to people only using their aliases.\n"
                 "- DO NOT mention a person’s trophies or teams unless they are explicitly mentioned by the user.\n"
             )
+
             if sender_profile:
                 prompt += "The sender of the message is someone you know:\n"
                 prompt += profile_block(sender_profile, is_sender=True) + "\n"
@@ -222,17 +249,17 @@ def webhook():
             ai_reply = query_gemini(prompt)
             reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*" if ai_reply else "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
 
-        else:
-            if "itzaroni" in text_lower:
-                reply = f"*Beep Boop* {get_itzaroni_reply()} *Beep Boop*"
-            elif "pistol pail" in text_lower:
-                reply = f"*Beep Boop* {random.choice(pistol_pail_insults)} *Beep Boop*"
-            elif "silver" in text_lower or "2nd" in text_lower or "second" in text_lower:
-                reply = "*Beep Boop* Paging Pistol Pail! 🥈 *Beep Boop*"
-            elif "kzar" in text_lower:
-                reply = f"*Beep Boop* {get_kzar_reply()} *Beep Boop*"
-            elif "franzia" in text_lower and "title" in text_lower:
-                reply = "*Beep Boop* Franzia and titles? https://howmanydayssincefranzialastwonthegoon.netlify.app/ *Beep Boop*"
+    else:
+        if "itzaroni" in text_lower:
+            reply = f"*Beep Boop* {get_itzaroni_reply()} *Beep Boop*"
+        elif "pistol pail" in text_lower:
+            reply = f"*Beep Boop* {random.choice(pistol_pail_insults)} *Beep Boop*"
+        elif "silver" in text_lower or "2nd" in text_lower or "second" in text_lower:
+            reply = "*Beep Boop* Paging Pistol Pail! 🥈 *Beep Boop*"
+        elif "kzar" in text_lower:
+            reply = f"*Beep Boop* {get_kzar_reply()} *Beep Boop*"
+        elif "franzia" in text_lower and "title" in text_lower:
+            reply = "*Beep Boop* Franzia and titles? https://howmanydayssincefranzialastwonthegoon.netlify.app/ *Beep Boop*"
 
     if reply:
         send_groupme_message(reply)
