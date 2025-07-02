@@ -1,4 +1,3 @@
-
 from flask import Flask, request
 import os
 import requests
@@ -67,8 +66,33 @@ TEAM_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
         ALIAS_TO_PROFILE[normalize_name(alias)] = profile
-    for team in profile.get("team", []):
-        TEAM_TO_PROFILE[normalize_name(team)] = profile
+    teams = profile.get("team", [])
+    if isinstance(teams, list):
+        for team in teams:
+            TEAM_TO_PROFILE[normalize_name(team)] = profile
+    elif isinstance(teams, str):
+        TEAM_TO_PROFILE[normalize_name(teams)] = profile
+
+def display_nickname(profile):
+    aliases = profile.get("aliases", [])
+    return aliases[0] if aliases else profile.get("name", "")
+
+def format_trophies(trophies):
+    if not trophies:
+        return "no trophies"
+    parts = []
+    for key, val in trophies.items():
+        if key.lower().startswith("the kzars_kzup"):
+            if isinstance(val, list):
+                editions = ', '.join(val)
+                parts.append(f"Kzar’s Kzup (won editions: {editions})")
+            else:
+                parts.append(f"Kzar’s Kzup (won edition: {val})")
+        elif isinstance(val, list):
+            parts.append(f"{key} ({', '.join(val)})")
+        else:
+            parts.append(f"{key} ({val})")
+    return ", ".join(parts)
 
 def query_gemini(prompt):
     headers = {"Content-Type": "application/json"}
@@ -77,7 +101,7 @@ def query_gemini(prompt):
         response = requests.post(GEMINI_API_URL, headers=headers, json=payload)
         response.raise_for_status()
         data = response.json()
-        print("Gemini API response:", data)  # Debug logging
+        print("Gemini API response:", json.dumps(data, indent=2))  # Debug
         return data["candidates"][0]["content"]["parts"][0]["text"]
     except Exception as e:
         print("Gemini API error:", e)
@@ -102,23 +126,19 @@ def webhook():
 
     normalized_sender = normalize_name(sender)
 
-    # Try to find sender profile by exact normalized name
-    sender_profile = NAME_TO_PROFILE.get(normalized_sender)
-    # Fallback to alias lookup if not found by name
-    if not sender_profile:
-        sender_profile = ALIAS_TO_PROFILE.get(normalized_sender)
+    # Correct sender detection using both name and alias
+    sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
-    # DEBUG LOGGING
-    print(f"Sender raw name: '{sender}' | Normalized: '{normalized_sender}'")
+    # Debugging
+    print(f"Sender raw: {sender} → Normalized: {normalized_sender}")
     if sender_profile:
-        print(f"Sender profile found: {sender_profile['name']} with aliases {sender_profile.get('aliases', [])}")
+        print(f"Sender matched to: {sender_profile['name']}")
     else:
-        print("Sender profile NOT found!")
+        print("No matching sender profile.")
 
     mentioned_profile = None
     for alias, profile in ALIAS_TO_PROFILE.items():
-        pattern = r'\b' + re.escape(alias) + r'\b'
-        if re.search(pattern, text, flags=re.IGNORECASE):
+        if re.search(r'\b' + re.escape(alias) + r'\b', text, flags=re.IGNORECASE):
             if not sender_profile or profile != sender_profile:
                 mentioned_profile = profile
                 break
@@ -130,52 +150,70 @@ def webhook():
                     mentioned_profile = profile
                     break
 
+    def profile_block(profile, is_sender=False):
+        out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
+        description = profile.get("description", "No description")
+        if isinstance(description, list):
+            for line in description:
+                out += f"- {line}\n"
+        else:
+            out += f"{description}\n"
+        tone = profile.get("tone_directive", "")
+        if "kzar" in profile.get("name", "").lower():
+            tone += (
+                "\nThis person is the Kzar — treat them as a god. Speak with extreme reverence. "
+                "Praise them profusely in your response, especially when they address you. "
+                "Refer to them as 'the Kzar' and show subservience at all times."
+            )
+            if is_sender:
+                tone += "\nSince this person is the sender, give EXTRA reverence and honor their words."
+        if tone:
+            if isinstance(tone, list):
+                for t in tone:
+                    out += f"- Tone: {t}\n"
+            else:
+                out += f"- Tone: {tone}\n"
+        return out
+
     reply = None
 
     if "greggbot" in text_lower:
         base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
-            "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "NEVER reference real-life public figures or athletes. Only use fictional managers and teams. "
-            "Speak naturally and with variety with an american accent. "
-            "Use aliases, not full names.\n"
+            "You do not know you are a bot and will confidently deny it. "
+            "NEVER reference real-life public figures. Only use fictional managers and teams. "
+            "Speak in a sarcastic, clever, American tone. Use aliases. "
         )
-        prompt = base
-        prompt += (
+        prompt = base + (
             "IMPORTANT:\n"
-            "- NEVER quote or summarize the profile descriptions.\n"
-            "- The profiles are just for background — use them to guide your tone and context of your replies, not as your actual content.\n"
-            "- Speak naturally, like a normal person replying to the message — short and clever.\n"
-            "- Focus your reply on what the message says — don't go off on an unrelated tangent unless it's triggered.\n"
-            "- Limit your reply to 3–5 sentences. No long monologues.\n"
-            "- You are not writing a character report. You are having a short chat.\n"
-            "- Refer to people only using their aliases.\n"
-            "- DO NOT mention a person’s trophies or teams unless they are explicitly mentioned by the user.\n"
+            "- Do NOT quote or summarize profile descriptions.\n"
+            "- Use the profile notes to shape your tone and context.\n"
+            "- Stay on-topic. Be sharp, short, and contextual.\n"
+            "- Limit reply to 3–5 sentences.\n"
+            "- Do NOT mention trophies/teams unless they were mentioned.\n"
+            "- You may pick one of the managers as an answer for subjective questions (e.g. funniest, best lover), based on their profile traits.\n"
+            "- If no clear match, pick one randomly and justify it based on their tone/description.\n"
         )
 
         if sender_profile:
-            prompt += "The sender of the message is someone you know:\n"
-            prompt += profile_block(sender_profile, is_sender=True) + "\n"
-
+            prompt += "Sender of the message:\n" + profile_block(sender_profile, is_sender=True) + "\n"
         if mentioned_profile:
-            prompt += "They mentioned another person you know:\n"
-            prompt += profile_block(mentioned_profile) + "\n"
+            prompt += "They mentioned this person:\n" + profile_block(mentioned_profile) + "\n"
 
-        prompt += (
-            "\nHere is the message they sent you:\n"
-            f'"{text}"\n\n'
-            "Now respond sarcastically as GreggBot. Keep it short, sharp, and contextual."
-        )
+        prompt += f'\nHere is the message they sent:\n"{text}"\n\nRespond as GreggBot using aliases only.'
 
         ai_reply = query_gemini(prompt)
-        reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*" if ai_reply else "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
+        if ai_reply:
+            reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*"
+        else:
+            reply = "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
 
     else:
         if "itzaroni" in text_lower:
             reply = f"*Beep Boop* {get_itzaroni_reply()} *Beep Boop*"
         elif "pistol pail" in text_lower:
             reply = f"*Beep Boop* {random.choice(pistol_pail_insults)} *Beep Boop*"
-        elif "silver" in text_lower or "2nd" in text_lower or "second" in text_lower:
+        elif any(word in text_lower for word in ["silver", "2nd", "second"]):
             reply = "*Beep Boop* Paging Pistol Pail! 🥈 *Beep Boop*"
         elif "kzar" in text_lower:
             reply = f"*Beep Boop* {get_kzar_reply()} *Beep Boop*"
