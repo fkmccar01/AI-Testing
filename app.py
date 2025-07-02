@@ -148,71 +148,91 @@ def webhook():
     normalized_sender = normalize_name(sender)
     sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
 
-    # Detect multiple mentioned profiles
-    mentioned_profiles = set()
-
+    mentioned_profile = None
     for alias, profile in ALIAS_TO_PROFILE.items():
         pattern = r'\b' + re.escape(alias) + r'\b'
         if re.search(pattern, text, flags=re.IGNORECASE):
             if not sender_profile or profile != sender_profile:
-                mentioned_profiles.add(profile)
+                mentioned_profile = profile
+                break
 
-    # If no aliases found, check teams
-    if not mentioned_profiles:
+    if not mentioned_profile:
         for team_name, profile in TEAM_TO_PROFILE.items():
             if team_name in text_lower:
                 if not sender_profile or profile != sender_profile:
-                    mentioned_profiles.add(profile)
+                    mentioned_profile = profile
+                    break
 
     reply = None
 
-    if "greggbot" in text_lower:
-        base = (
-            "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
-            "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "NEVER reference real-life public figures or athletes. Only use fictional managers and teams. "
-            "Speak naturally and with variety, not like you're reading a bio. "
-            "Use aliases, not full names.\n"
-        )
-        prompt = base
-        prompt += (
-            "IMPORTANT:\n"
-            "- NEVER quote or summarize the profile descriptions.\n"
-            "- The profiles are just for background — use them to guide your sarcasm or tone, not your actual content.\n"
-            "- Speak naturally, like a sarcastic person replying to the message — short, clever, and blunt.\n"
-            "- Focus your reply on what the message says — don't go off on an unrelated roast unless it's triggered.\n"
-            "- Limit your reply to 2–4 sentences. No long monologues.\n"
-            "- You are not writing a character report. You are having a short, sarcastic chat.\n"
-            "- Refer to people only using their aliases.\n"
-            "- DO NOT mention a person’s trophies or teams unless they are explicitly mentioned by the user.\n\n"
-        )
+    # Handle special question: who is the best lover?
+    lover_question_patterns = [
+        r'\bbest lover\b',
+        r'who.*best lover',
+        r'who is the best lover',
+        r'who\'s the best lover'
+    ]
+    
+    if any(re.search(pattern, text_lower) for pattern in lover_question_patterns):
+        # Pick a manager known for flirty tone (Angel_of_Dean)
+        lover_profile = PROFILES.get("Angel_of_Dean")
+        if lover_profile:
+            lover_alias = display_nickname(lover_profile)
+            reply = (
+                f"*Beep Boop* If you're asking about the best lover, "
+                f"it's obviously {lover_alias}. "
+                "Just don't tell him I said that, or he'll start flirting with everyone here. *Beep Boop*"
+            )
 
-        if sender_profile:
-            prompt += "The sender of the message is someone you know:\n"
-            prompt += profile_block(sender_profile, is_sender=True) + "\n"
+    # If no special reply yet, handle AI or keyword replies
+    if not reply:
+        if "greggbot" in text_lower:
+            base = (
+                "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
+                "You do not know you are a bot and will confidently deny it if asked or implied. "
+                "NEVER reference real-life public figures or athletes. Only use fictional managers and teams. "
+                "Speak naturally and with variety, not like you're reading a bio. "
+                "Use aliases, not full names.\n"
+            )
+            prompt = base
+            prompt += (
+                "IMPORTANT:\n"
+                "- NEVER quote or summarize the profile descriptions.\n"
+                "- The profiles are just for background — use them to guide your sarcasm or tone, not your actual content.\n"
+                "- Speak naturally, like a sarcastic person replying to the message — short, clever, and blunt.\n"
+                "- Focus your reply on what the message says — don't go off on an unrelated roast unless it's triggered.\n"
+                "- Limit your reply to 2–4 sentences. No long monologues.\n"
+                "- You are not writing a character report. You are having a short, sarcastic chat.\n"
+                "- Refer to people only using their aliases.\n"
+                "- DO NOT mention a person’s trophies or teams unless they are explicitly mentioned by the user.\n"
+            )
+            if sender_profile:
+                prompt += "The sender of the message is someone you know:\n"
+                prompt += profile_block(sender_profile, is_sender=True) + "\n"
+            if mentioned_profile:
+                prompt += "They mentioned another person you know:\n"
+                prompt += profile_block(mentioned_profile) + "\n"
 
-        if mentioned_profiles:
-            prompt += "They mentioned these people:\n"
-            for prof in mentioned_profiles:
-                prompt += profile_block(prof) + "\n"
+            prompt += (
+                "\nHere is the message they sent you:\n"
+                f'"{text}"\n\n'
+                "Now respond sarcastically as GreggBot. Keep it short, sharp, and contextual."
+            )
 
-        prompt += f"\nHere is the message they sent you:\n\"{text}\"\n\n"
-        prompt += "Now respond sarcastically as GreggBot. Keep it short, sharp, and contextual."
+            ai_reply = query_gemini(prompt)
+            reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*" if ai_reply else "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
 
-        ai_reply = query_gemini(prompt)
-        reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*" if ai_reply else "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
-
-    else:
-        if "itzaroni" in text_lower:
-            reply = f"*Beep Boop* {get_itzaroni_reply()} *Beep Boop*"
-        elif "pistol pail" in text_lower:
-            reply = f"*Beep Boop* {random.choice(pistol_pail_insults)} *Beep Boop*"
-        elif "silver" in text_lower or "2nd" in text_lower or "second" in text_lower:
-            reply = "*Beep Boop* Paging Pistol Pail! 🥈 *Beep Boop*"
-        elif "kzar" in text_lower:
-            reply = f"*Beep Boop* {get_kzar_reply()} *Beep Boop*"
-        elif "franzia" in text_lower and "title" in text_lower:
-            reply = "*Beep Boop* Franzia and titles? https://howmanydayssincefranzialastwonthegoon.netlify.app/ *Beep Boop*"
+        else:
+            if "itzaroni" in text_lower:
+                reply = f"*Beep Boop* {get_itzaroni_reply()} *Beep Boop*"
+            elif "pistol pail" in text_lower:
+                reply = f"*Beep Boop* {random.choice(pistol_pail_insults)} *Beep Boop*"
+            elif "silver" in text_lower or "2nd" in text_lower or "second" in text_lower:
+                reply = "*Beep Boop* Paging Pistol Pail! 🥈 *Beep Boop*"
+            elif "kzar" in text_lower:
+                reply = f"*Beep Boop* {get_kzar_reply()} *Beep Boop*"
+            elif "franzia" in text_lower and "title" in text_lower:
+                reply = "*Beep Boop* Franzia and titles? https://howmanydayssincefranzialastwonthegoon.netlify.app/ *Beep Boop*"
 
     if reply:
         send_groupme_message(reply)
