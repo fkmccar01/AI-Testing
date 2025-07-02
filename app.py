@@ -100,7 +100,19 @@ def webhook():
         return "", 200
 
     normalized_sender = normalize_name(sender)
-    sender_profile = NAME_TO_PROFILE.get(normalized_sender) or ALIAS_TO_PROFILE.get(normalized_sender)
+
+    # Try to find sender profile by exact normalized name
+    sender_profile = NAME_TO_PROFILE.get(normalized_sender)
+    # Fallback to alias lookup if not found by name
+    if not sender_profile:
+        sender_profile = ALIAS_TO_PROFILE.get(normalized_sender)
+
+    # DEBUG LOGGING
+    print(f"Sender raw name: '{sender}' | Normalized: '{normalized_sender}'")
+    if sender_profile:
+        print(f"Sender profile found: {sender_profile['name']} with aliases {sender_profile.get('aliases', [])}")
+    else:
+        print("Sender profile NOT found!")
 
     mentioned_profile = None
     for alias, profile in ALIAS_TO_PROFILE.items():
@@ -120,41 +132,44 @@ def webhook():
     reply = None
 
     if "greggbot" in text_lower:
-        # Build prompt with full profiles context
-        prompt = (
+        base = (
             "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
             "You do not know you are a bot and will confidently deny it if asked or implied. "
-            "You know the other managers listed below with their descriptions and tone directives.\n"
-            "NEVER mention real-life public figures or athletes. Only fictional managers and teams.\n"
-            "Use aliases to refer to people, never full names.\n"
-            "Speak naturally, short, and focused on the message.\n"
-            "Do NOT quote or summarize profile descriptions literally.\n"
-            "Do NOT mention trophies or teams unless explicitly mentioned in the message.\n"
-        
+            "NEVER reference real-life public figures or athletes. Only use fictional managers and teams. "
+            "Speak naturally and with variety with an american accent. "
+            "Use aliases, not full names.\n"
+        )
+        prompt = base
+        prompt += (
+            "IMPORTANT:\n"
+            "- NEVER quote or summarize the profile descriptions.\n"
+            "- The profiles are just for background — use them to guide your tone and context of your replies, not as your actual content.\n"
+            "- Speak naturally, like a normal person replying to the message — short and clever.\n"
+            "- Focus your reply on what the message says — don't go off on an unrelated tangent unless it's triggered.\n"
+            "- Limit your reply to 3–5 sentences. No long monologues.\n"
+            "- You are not writing a character report. You are having a short chat.\n"
+            "- Refer to people only using their aliases.\n"
+            "- DO NOT mention a person’s trophies or teams unless they are explicitly mentioned by the user.\n"
         )
 
-        # Add all profiles info as context
-        for profile in PROFILES.values():
-            aliases = ", ".join(profile.get("aliases", []))
-            desc = profile.get("description", "")
-            if isinstance(desc, list):
-                desc = " ".join(desc)
-            tone = profile.get("tone_directive", "")
-            if isinstance(tone, list):
-                tone = " ".join(tone)
-            prompt += f"Alias(es): {aliases}\nDescription: {desc}\nTone: {tone}\n\n"
+        if sender_profile:
+            prompt += "The sender of the message is someone you know:\n"
+            prompt += profile_block(sender_profile, is_sender=True) + "\n"
 
-        prompt += f"Message: \"{text}\"\n"
-        prompt += "Now respond sarcastically as GreggBot, referencing these profiles naturally and briefly."
+        if mentioned_profile:
+            prompt += "They mentioned another person you know:\n"
+            prompt += profile_block(mentioned_profile) + "\n"
+
+        prompt += (
+            "\nHere is the message they sent you:\n"
+            f'"{text}"\n\n'
+            "Now respond sarcastically as GreggBot. Keep it short, sharp, and contextual."
+        )
 
         ai_reply = query_gemini(prompt)
-        if ai_reply:
-            reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*"
-        else:
-            reply = "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
+        reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*" if ai_reply else "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
 
     else:
-        # Hardcoded quick replies for certain keywords
         if "itzaroni" in text_lower:
             reply = f"*Beep Boop* {get_itzaroni_reply()} *Beep Boop*"
         elif "pistol pail" in text_lower:
