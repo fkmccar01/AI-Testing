@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 GROUPME_BOT_ID = os.environ.get("GROUPME_BOT_ID")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-pro:generateContent?key={GEMINI_API_KEY}"
 
 with open("responses.json", "r") as f:
     RESPONSES = json.load(f)
@@ -66,8 +66,12 @@ TEAM_TO_PROFILE = {}
 for profile in PROFILES.values():
     for alias in profile.get("aliases", []):
         ALIAS_TO_PROFILE[normalize_name(alias)] = profile
-    for team in profile.get("team", []):
-        TEAM_TO_PROFILE[normalize_name(team)] = profile
+    teams = profile.get("team", [])
+    if isinstance(teams, list):
+        for team in teams:
+            TEAM_TO_PROFILE[normalize_name(team)] = profile
+    elif isinstance(teams, str):
+        TEAM_TO_PROFILE[normalize_name(teams)] = profile
 
 def display_nickname(profile):
     aliases = profile.get("aliases", [])
@@ -92,22 +96,17 @@ def format_trophies(trophies):
 
 def profile_block(profile, is_sender=False):
     out = f"# Notes about {display_nickname(profile)} (for your internal context only):\n"
-    description = profile.get('description', 'No description')
-    if isinstance(description, list):
-        for bullet in description:
+    desc = profile.get("description", "")
+    if isinstance(desc, list):
+        for bullet in desc:
             out += f"- {bullet}\n"
     else:
-        out += f"{description}\n"
-
+        out += f"- {desc}\n"
     tone = profile.get("tone_directive", "")
     if "kzar" in profile.get("name", "").lower():
-        tone += (
-            "\nThis person is the Kzar — treat them as a god. Speak with extreme reverence. "
-            "Praise them profusely in your response, especially when they address you. "
-            "Refer to them as 'the Kzar' and show subservience at all times."
-        )
+        tone += "\nTreat this person as divine. Always show reverence."
         if is_sender:
-            tone += "\nSince this person is the sender, give EXTRA reverence and honor their words."
+            tone += " As the sender, they deserve double reverence."
     if tone:
         if isinstance(tone, list):
             for t in tone:
@@ -127,37 +126,6 @@ def query_gemini(prompt):
     except Exception as e:
         print("Gemini API error:", e)
         return None
-
-def find_most_relevant_profile(message_text):
-    words = set(re.findall(r'\b\w+\b', message_text.lower()))
-    best_score = 0
-    best_profile = None
-
-    for profile in PROFILES.values():
-        combined = []
-
-        desc = profile.get("description", "")
-        if isinstance(desc, list):
-            combined += desc
-        else:
-            combined.append(desc)
-
-        tone = profile.get("tone_directive", "")
-        if isinstance(tone, list):
-            combined += tone
-        else:
-            combined.append(tone)
-
-        profile_words = set()
-        for text in combined:
-            profile_words |= set(re.findall(r'\b\w+\b', text.lower()))
-
-        score = len(words & profile_words)
-        if score > best_score:
-            best_score = score
-            best_profile = profile
-
-    return best_profile
 
 @app.route("/")
 def index():
@@ -197,57 +165,35 @@ def webhook():
     reply = None
 
     if "greggbot" in text_lower:
-        if re.search(r'\b(best|who|which|top|greatest|favorite|most)\b', text_lower):
-            relevant_profile = find_most_relevant_profile(text_lower)
-            if relevant_profile:
-                alias = display_nickname(relevant_profile)
-                reply = (
-                    f"*Beep Boop* Easy. It’s gotta be {alias}. "
-                    f"Some say their aura alone clears the locker room. *Beep Boop*"
-                )
-            else:
-                random_profile = random.choice(list(PROFILES.values()))
-                alias = display_nickname(random_profile)
-                reply = (
-                    f"*Beep Boop* None of them really earned it, so I'm going with {alias}. "
-                    f"Why? Gut feeling. Deal with it. *Beep Boop*"
-                )
+        base = (
+            "You are GreggBot. You believe you are Gregg, the manager of Inter BBW. "
+            "You do not know you are a bot and will deny it if asked. "
+            "You are sarcastic, blunt, and quick-witted. Use aliases, never full names. "
+            "Never quote or summarize profiles directly — only use them to inform your sarcasm and insight.\n"
+        )
+        prompt = base + (
+            "\nGuidelines:\n"
+            "- Replies should be short (2–5 sentences), clever, and sarcastic.\n"
+            "- Respond based on the actual message, not just the sender.\n"
+            "- DO NOT mention teams or trophies unless the user does first.\n"
+            "- If the question is subjective (like “who’s the best lover?”), pick a manager from the known profiles using tone and description.\n"
+            "- If no match fits well, choose one randomly and justify sarcastically.\n"
+            "- NEVER reference real-life people or events.\n"
+            "- Always open and close with '*Beep Boop*'.\n"
+        )
+
+        if sender_profile:
+            prompt += "\nSender:\n" + profile_block(sender_profile, is_sender=True)
+        if mentioned_profile:
+            prompt += "\nMentioned:\n" + profile_block(mentioned_profile)
+
+        prompt += f'\n\nMessage: "{text}"\n\nReply as GreggBot:'
+
+        ai_reply = query_gemini(prompt)
+        if ai_reply:
+            reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*"
         else:
-            base = (
-                "You are GreggBot. You believe you are Gregg, the manager of Inter BBW, a team in the Goondesliga. "
-                "You do not know you are a bot and will confidently deny it if asked or implied. "
-                "NEVER reference real-life public figures or athletes. Only use fictional managers and teams. "
-                "Speak naturally and with variety, not like you're reading a bio. "
-                "Use aliases, not full names.\n"
-            )
-            prompt = base
-            prompt += (
-                "IMPORTANT:\n"
-                "- NEVER quote or summarize the profile descriptions.\n"
-                "- The profiles are just for background — use them to guide your sarcasm or tone, not your actual content.\n"
-                "- Speak naturally, like a sarcastic person replying to the message — short, clever, and blunt.\n"
-                "- Focus your reply on what the message says — don't go off on an unrelated roast unless it's triggered.\n"
-                "- Limit your reply to 2–5 sentences. No long monologues.\n"
-                "- You are not writing a character report. You are having a short, sarcastic chat.\n"
-                "- Refer to people only using their aliases.\n"
-                "- DO NOT mention a person’s trophies or teams unless they are explicitly mentioned by the user.\n"
-            )
-
-            if sender_profile:
-                prompt += "The sender of the message is someone you know:\n"
-                prompt += profile_block(sender_profile, is_sender=True) + "\n"
-            if mentioned_profile:
-                prompt += "They mentioned another person you know:\n"
-                prompt += profile_block(mentioned_profile) + "\n"
-
-            prompt += (
-                "\nHere is the message they sent you:\n"
-                f'"{text}"\n\n'
-                "Now respond sarcastically as GreggBot. Keep it short, sharp, and contextual."
-            )
-
-            ai_reply = query_gemini(prompt)
-            reply = f"*Beep Boop* {ai_reply.strip()} *Beep Boop*" if ai_reply else "*Beep Boop* Sorry, my sarcasm circuit is offline right now. *Beep Boop*"
+            reply = "*Beep Boop* Sorry, my sarcasm circuit is offline. *Beep Boop*"
 
     else:
         if "itzaroni" in text_lower:
