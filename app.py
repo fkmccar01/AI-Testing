@@ -121,6 +121,9 @@ def webhook():
     text = data.get("text", "")
     text_lower = text.lower()
 
+    if sender.lower() == "taycan a. schitt":
+        return "", 200
+
     if sender.lower() == "greggbot":
         return "", 200
 
@@ -213,8 +216,10 @@ def webhook():
             reply = f"*Beep Boop* {get_itzaroni_reply()} *Beep Boop*"
         elif "pistol pail" in text_lower:
             reply = f"*Beep Boop* {random.choice(pistol_pail_insults)} *Beep Boop*"
-        elif any(word in text_lower for word in ["silver", "2nd", "second"]):
-            reply = "*Beep Boop* Paging Pistol Pail! 🥈 *Beep Boop*"
+        elif any(word in text_lower for word in ["2nd", "second"]):
+            reply = "*Beep Boop* 2nd? Paging Pistol Pail! 🥈 *Beep Boop*"
+        elif any(word in text_lower for word in ["silver"]):
+            reply = "*Beep Boop* Silver? Paging Pistol Pail! 🥈 *Beep Boop*"
         elif "kzar" in text_lower:
             reply = f"*Beep Boop* {get_kzar_reply()} *Beep Boop*"
         elif "franzia" in text_lower and "title" in text_lower:
